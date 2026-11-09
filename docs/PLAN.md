@@ -25,13 +25,13 @@ The reference repo (avinaxhroy/Tempo) uses AGPLv3 plus custom terms: no commerci
 | UI | Jetpack Compose, Material 3 (heavily customised theme) |
 | Build | AGP 9.3.2+, Gradle 9.5+, JDK 17 |
 | Database | Room |
-| DI | Hilt |
+| DI | Manual (`AppContainer`); a framework is overkill here |
 | Settings | DataStore |
 | Background | Foreground service, WorkManager (watchdog) |
 | Navigation | Navigation Compose |
 | Images | Coil 3 |
 | Charts | Vico, plus custom Compose Canvas for heatmaps |
-| Min / target SDK | 26 / 36 (re-check target at project setup) |
+| Min / compile / target SDK | 26 / 37 / 36 (Compose 1.12 needs compileSdk 37) |
 | CI | GitHub Actions builds the APK |
 
 Pin the Compose BOM at project setup time.
@@ -126,9 +126,11 @@ Shareable image cards, home screen widgets, Last.fm or other imports, artwork an
 ## 7. Build order
 Each step ends with a working APK from GitHub Actions.
 
-0. **Project skeleton** and the GitHub Actions workflow (debug APK as a downloadable artifact).
-1. **Tracking engine and database**, with a bare debug screen to verify events. Riskiest part, so first.
-2. **Onboarding and permissions.**
+0. **Project skeleton** and the GitHub Actions workflow. DONE.
+1. **Tracking engine and database**, with a bare debug screen to verify events. BUILT, needs testing on a real phone.
+   - Pure Kotlin `PlaybackTracker` with unit tests (run in CI), Room schema, `NotificationListenerService`, debug screen.
+1b. **Background hardening**, after phone testing: foreground service, session recovery after a kill, boot receiver, watchdog.
+2. **Onboarding and permissions.** Includes the "Allow restricted settings" step for sideloaded APKs on Android 13+.
 3. **Design system**: colors, type, components.
 4. **Now** tab.
 5. **History** tab.
