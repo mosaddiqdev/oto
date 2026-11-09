@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.oto.stats"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.oto.stats"
