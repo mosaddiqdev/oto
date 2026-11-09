@@ -129,7 +129,9 @@ Each step ends with a working APK from GitHub Actions.
 0. **Project skeleton** and the GitHub Actions workflow. DONE.
 1. **Tracking engine and database**, with a bare debug screen to verify events. BUILT, needs testing on a real phone.
    - Pure Kotlin `PlaybackTracker` with unit tests (run in CI), Room schema, `NotificationListenerService`, debug screen.
-1b. **Background hardening**, after phone testing: foreground service, session recovery after a kill, boot receiver, watchdog.
+1b. **Background hardening.** BUILT, needs testing on a real phone.
+   - Open listens saved every ~30 s and resumed or recovered after a process kill; boot/update receiver; 30-minute watchdog that rebinds the listener; battery-restriction card.
+   - Not done on purpose: a foreground-service notification. The listener is system-bound; add one only if phone testing shows kills.
 2. **Onboarding and permissions.** Includes the "Allow restricted settings" step for sideloaded APKs on Android 13+.
 3. **Design system**: colors, type, components.
 4. **Now** tab.
