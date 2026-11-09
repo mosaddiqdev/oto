@@ -52,6 +52,9 @@ fun DebugScreen(
     container: AppContainer,
     accessGranted: Boolean,
     onOpenAccessSettings: () -> Unit,
+    batteryExempt: Boolean,
+    onRequestBatteryExemption: () -> Unit,
+    onOpenAppSettings: () -> Unit,
 ) {
     val connected by TrackingStatus.listenerConnected.collectAsState()
     val nowPlaying by TrackingStatus.nowPlaying.collectAsState()
@@ -97,6 +100,30 @@ fun DebugScreen(
                         color = OtoColors.TextTertiary,
                     )
                 }
+            }
+        }
+
+        item {
+            DebugCard {
+                Text("Background protection", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                StatusRow(
+                    "Battery restrictions",
+                    if (batteryExempt) "Unrestricted" else "Restricted",
+                    if (batteryExempt) OtoColors.Success else OtoColors.Warning,
+                )
+                if (!batteryExempt) {
+                    Button(onClick = onRequestBatteryExemption, modifier = Modifier.fillMaxWidth()) {
+                        Text("Allow background activity")
+                    }
+                }
+                OutlinedButton(onClick = onOpenAppSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text("Open app settings")
+                }
+                Text(
+                    "Some phones (Xiaomi, Oppo, Vivo, OnePlus, Samsung) also need Autostart turned on and the app locked in Recents, or they stop tracking when the screen is off.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OtoColors.TextTertiary,
+                )
             }
         }
 

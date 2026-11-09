@@ -15,8 +15,6 @@ data class SessionRules(
     val maxTrackDurationMs: Long = 20 * 60_000,
     /** Slack when comparing position progress with wall-clock progress. */
     val seekToleranceMs: Long = 2_000,
-    /** A single position step larger than this is never counted. */
-    val maxSingleStepMs: Long = 5 * 60_000,
     /** Position at or below this, after being well past it, means the track restarted. */
     val restartWindowMs: Long = 5_000,
     val restartMinPriorPositionMs: Long = 10_000,

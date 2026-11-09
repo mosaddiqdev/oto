@@ -32,6 +32,21 @@ data class ListenResult(
     val seekCount: Int,
 )
 
+/**
+ * A listen that is still open. Saved periodically so it can be resumed or recovered
+ * if the process is killed.
+ */
+data class OpenSession(
+    val sessionId: String,
+    val packageName: String,
+    val meta: TrackMeta,
+    val startedAtMs: Long,
+    val lastActiveAtMs: Long,
+    val playedMs: Long,
+    val pauseCount: Int,
+    val seekCount: Int,
+)
+
 /** Live view of one player, for the UI. */
 data class NowPlayingSnapshot(
     val packageName: String,

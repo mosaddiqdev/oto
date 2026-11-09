@@ -101,6 +101,40 @@ class PlaybackTracker(
         return NowPlayingSnapshot(packageName, m, state, session?.playedMs ?: 0L, countable)
     }
 
+    /** The listen currently open, if any, in a form that can be saved. */
+    fun openSession(): OpenSession? {
+        val s = session ?: return null
+        val m = meta ?: return null
+        if (!countable) return null
+        return OpenSession(
+            sessionId = s.id,
+            packageName = packageName,
+            meta = m,
+            startedAtMs = s.startedAtMs,
+            lastActiveAtMs = s.lastActiveEpochMs,
+            playedMs = s.playedMs,
+            pauseCount = s.pauseCount,
+            seekCount = s.seekCount,
+        )
+    }
+
+    /**
+     * Resumes a saved session after a restart. Call before feeding live metadata and state:
+     * if the same track is still playing it continues, otherwise it is closed and saved.
+     */
+    fun restore(open: OpenSession) {
+        if (session != null) return
+        meta = open.meta
+        countable = ContentFilter.isCountable(open.meta, packageName, rules)
+        if (!countable) return
+        session = Session(open.sessionId, open.startedAtMs).also {
+            it.playedMs = open.playedMs
+            it.lastActiveEpochMs = open.lastActiveAtMs
+            it.pauseCount = open.pauseCount
+            it.seekCount = open.seekCount
+        }
+    }
+
     private fun openSessionIfReady(clock: Clock) {
         if (session == null && state == PlayState.PLAYING && countable && meta != null) {
             session = Session(newSessionId(), clock.epochMs)
@@ -123,7 +157,7 @@ class PlaybackTracker(
             delta > 0 -> {
                 val allowed = (wallDelta * maxOf(speed, 1f)).toLong() + rules.seekToleranceMs
                 if (delta <= allowed) {
-                    s.playedMs += minOf(delta, rules.maxSingleStepMs)
+                    s.playedMs += delta
                 } else {
                     s.seekCount++ // jumped forward
                 }
@@ -166,31 +200,18 @@ class PlaybackTracker(
     private fun finalize(s: Session, endedAtMs: Long) {
         val m = meta ?: return
         if (!countable) return
-
-        val known = m.durationMs?.takeIf { it > 0 }
-        val duration = known ?: rules.fallbackDurationMs
-        val played = minOf(s.playedMs, (duration * rules.maxPlayedMultiple).toLong())
-        if (played < rules.requiredPlayMs(known)) return
-
-        val completion = ((played * 100) / duration).coerceIn(0L, 100L).toInt()
-        val skipped = played.toDouble() < duration * rules.skipBelowFraction
-
-        onFinished(
-            ListenResult(
-                sessionId = s.id,
-                packageName = packageName,
-                meta = m,
-                startedAtMs = s.startedAtMs,
-                endedAtMs = maxOf(endedAtMs, s.startedAtMs),
-                playedMs = played,
-                durationMs = duration,
-                durationEstimated = known == null,
-                completionPct = completion,
-                skipped = skipped,
-                pauseCount = s.pauseCount,
-                seekCount = s.seekCount,
-            ),
-        )
+        val result = buildListenResult(
+            sessionId = s.id,
+            packageName = packageName,
+            meta = m,
+            startedAtMs = s.startedAtMs,
+            endedAtMs = endedAtMs,
+            playedMs = s.playedMs,
+            pauseCount = s.pauseCount,
+            seekCount = s.seekCount,
+            rules = rules,
+        ) ?: return
+        onFinished(result)
     }
 
     private fun sameTrack(a: TrackMeta, b: TrackMeta): Boolean {

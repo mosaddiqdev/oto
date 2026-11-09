@@ -3,8 +3,10 @@ package com.oto.stats
 import android.app.Application
 import android.content.Context
 import com.oto.stats.data.ListeningRepository
+import com.oto.stats.data.OpenSessionStore
 import com.oto.stats.data.OtoDatabase
 import com.oto.stats.data.TrackingPrefs
+import com.oto.stats.tracking.ListenerWatchdogWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,6 +19,7 @@ class AppContainer(context: Context) {
     val database = OtoDatabase.build(context)
     val repository = ListeningRepository(database)
     val prefs = TrackingPrefs(context)
+    val openSessions = OpenSessionStore(context)
 }
 
 class OtoApp : Application() {
@@ -26,5 +29,6 @@ class OtoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        ListenerWatchdogWorker.schedule(this)
     }
 }

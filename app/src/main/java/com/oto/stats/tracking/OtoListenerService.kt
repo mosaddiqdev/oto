@@ -16,8 +16,10 @@ import com.oto.stats.OtoApp
 import com.oto.stats.tracking.engine.Clock
 import com.oto.stats.tracking.engine.ListenResult
 import com.oto.stats.tracking.engine.Normalize
+import com.oto.stats.tracking.engine.OpenSession
 import com.oto.stats.tracking.engine.PlayState
 import com.oto.stats.tracking.engine.PlaybackTracker
+import com.oto.stats.tracking.engine.SessionRecovery
 import com.oto.stats.tracking.engine.TrackMeta
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,11 +37,17 @@ import kotlinx.coroutines.launch
  *
  * One [PlaybackTracker] per active media session, fed by MediaController callbacks
  * plus a light position ticker while something is playing.
+ *
+ * Open listens are saved every ~30 s. If the process is killed, the next connection
+ * resumes them (same track still playing) or saves them (anything else).
  */
 class OtoListenerService : NotificationListenerService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val tracked = HashMap<MediaSession.Token, TrackedSession>()
+
+    /** Saved sessions from a previous run, keyed by package, waiting for their player to show up. */
+    private val pendingRestore = HashMap<String, OpenSession>()
 
     private var container: AppContainer? = null
     private var scope: CoroutineScope? = null
@@ -59,6 +67,9 @@ class OtoListenerService : NotificationListenerService() {
         val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scope = serviceScope
 
+        pendingRestore.clear()
+        appContainer.openSessions.all().forEach { pendingRestore[it.packageName] = it }
+
         val manager = getSystemService(MediaSessionManager::class.java)
         val name = ComponentName(this, OtoListenerService::class.java)
         sessionManager = manager
@@ -70,6 +81,9 @@ class OtoListenerService : NotificationListenerService() {
         } catch (e: SecurityException) {
             Log.w(TAG, "Notification access is not granted", e)
         }
+
+        // Anything saved for a player that is no longer active has ended: save it now.
+        recoverLeftovers()
 
         TrackingStatus.listenerConnected.value = true
 
@@ -95,6 +109,9 @@ class OtoListenerService : NotificationListenerService() {
         runCatching { sessionManager?.removeOnActiveSessionsChangedListener(sessionsListener) }
         tracked.values.toList().forEach { it.stop() }
         tracked.clear()
+        // Everything was closed and handed to the database, so nothing is left open.
+        container?.openSessions?.clear()
+        pendingRestore.clear()
         scope?.cancel()
         scope = null
         TrackingStatus.listenerConnected.value = false
@@ -117,24 +134,36 @@ class OtoListenerService : NotificationListenerService() {
         val allowed = controllers.filter { prefs.isAllowed(it.packageName) }
         val liveTokens = allowed.map { it.sessionToken }.toSet()
 
-        tracked.keys.filter { it !in liveTokens }.forEach { removeSession(it) }
+        tracked.keys.filter { it !in liveTokens }.forEach { tracked.remove(it)?.stop() }
 
         for (controller in allowed) {
             val token = controller.sessionToken
             if (token !in tracked) {
                 val session = TrackedSession(controller)
                 tracked[token] = session
-                session.start()
+                session.start(pendingRestore.remove(controller.packageName))
             }
         }
         publish()
         updateTicker()
+        saveOpenSessions()
     }
 
     private fun removeSession(token: MediaSession.Token) {
         tracked.remove(token)?.stop()
         publish()
         updateTicker()
+        saveOpenSessions()
+    }
+
+    private fun recoverLeftovers() {
+        if (pendingRestore.isEmpty()) return
+        val now = System.currentTimeMillis()
+        for (open in pendingRestore.values) {
+            SessionRecovery.toResult(open, now)?.let { persist(it) }
+        }
+        pendingRestore.clear()
+        saveOpenSessions()
     }
 
     private fun publish() {
@@ -144,16 +173,23 @@ class OtoListenerService : NotificationListenerService() {
                 ?: snapshots.firstOrNull { it.state == PlayState.PAUSED }
     }
 
+    private fun saveOpenSessions() {
+        val store = container?.openSessions ?: return
+        store.replaceAll(tracked.values.mapNotNull { it.tracker.openSession() })
+    }
+
     /** Runs the position ticker only while something is playing. */
     private fun updateTicker() {
         val serviceScope = scope ?: return
         val anyPlaying = tracked.values.any { it.isPlaying() }
         if (anyPlaying && tickerJob?.isActive != true) {
             tickerJob = serviceScope.launch {
+                var ticks = 0
                 while (isActive && tracked.values.any { it.isPlaying() }) {
                     delay(TICK_MS)
                     tracked.values.forEach { it.tick() }
                     publish()
+                    if (++ticks % SAVE_EVERY_TICKS == 0) saveOpenSessions()
                 }
             }
         }
@@ -180,11 +216,13 @@ class OtoListenerService : NotificationListenerService() {
                 handleState(state)
                 publish()
                 updateTicker()
+                saveOpenSessions()
             }
 
             override fun onMetadataChanged(metadata: MediaMetadata?) {
                 handleMetadata(metadata)
                 publish()
+                saveOpenSessions()
             }
 
             override fun onSessionDestroyed() {
@@ -192,7 +230,8 @@ class OtoListenerService : NotificationListenerService() {
             }
         }
 
-        fun start() {
+        fun start(restored: OpenSession?) {
+            if (restored != null) tracker.restore(restored)
             controller.registerCallback(callback, handler)
             handleMetadata(controller.metadata)
             handleState(controller.playbackState)
@@ -225,6 +264,7 @@ class OtoListenerService : NotificationListenerService() {
     private companion object {
         const val TAG = "OtoListener"
         const val TICK_MS = 4_000L
+        const val SAVE_EVERY_TICKS = 8 // about every 32 seconds
     }
 }
 
