@@ -7,6 +7,8 @@ object MusicApps {
         "com.spotify.music" to "Spotify",
         "com.spotify.lite" to "Spotify Lite",
         "com.google.android.apps.youtube.music" to "YouTube Music",
+        "app.morphe.android.apps.youtube.music" to "YouTube Music (Morphe)",
+        "app.revanced.android.apps.youtube.music" to "YouTube Music (ReVanced)",
         "com.apple.android.music" to "Apple Music",
         "com.amazon.mp3" to "Amazon Music",
         "deezer.android.app" to "Deezer",

@@ -62,6 +62,8 @@ class PlaybackTracker(
         state = newState
         when (newState) {
             PlayState.PLAYING -> {
+                // Resuming after a long pause (or a restored old session) is a new sitting.
+                if (previous != PlayState.PLAYING) closeIfIdle(clock)
                 openSessionIfReady(clock)
                 val s = session ?: return
                 if (previous == PlayState.PLAYING) {
@@ -157,6 +159,19 @@ class PlaybackTracker(
             it.pauseCount = open.pauseCount
             it.seekCount = open.seekCount
         }
+    }
+
+    /**
+     * Call about once a minute. Closes a listen that has been paused or stopped for longer than
+     * the pause timeout, even if the player is never resumed.
+     */
+    fun onIdleCheck(clock: Clock) {
+        if (state != PlayState.PLAYING) closeIfIdle(clock)
+    }
+
+    private fun closeIfIdle(clock: Clock) {
+        val s = session ?: return
+        if (clock.epochMs - s.lastActiveEpochMs >= rules.pauseTimeoutMs) closeSession(clock)
     }
 
     private fun openSessionIfReady(clock: Clock) {

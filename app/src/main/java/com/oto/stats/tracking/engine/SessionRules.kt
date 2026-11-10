@@ -22,6 +22,11 @@ data class SessionRules(
     val replayMinFraction: Double = 0.5,
     /** Safety cap on played time relative to track length. */
     val maxPlayedMultiple: Double = 3.0,
+    /**
+     * A listen paused (or left stopped) this long is over. Resuming later starts a new listen,
+     * so a song paused overnight does not keep last night's start time.
+     */
+    val pauseTimeoutMs: Long = 30 * 60_000,
 ) {
     fun requiredPlayMs(knownDurationMs: Long?): Long {
         if (knownDurationMs != null && knownDurationMs > 0 && knownDurationMs < minPlayMs * 2) {

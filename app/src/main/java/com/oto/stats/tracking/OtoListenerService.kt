@@ -83,7 +83,10 @@ class OtoListenerService : NotificationListenerService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        DiagLog.log("svc", "Start command (${intent?.action ?: "system restart"})")
+        // Opening the app asks again every time; only log it when it actually changes something.
+        if (intent == null || !isForeground) {
+            DiagLog.log("svc", "Start command (${intent?.action ?: "system restart"})")
+        }
         // Always answer a startForegroundService() call right away, and never stop here.
         promoteToForeground("start command")
         return START_STICKY
@@ -108,6 +111,10 @@ class OtoListenerService : NotificationListenerService() {
             while (isActive) {
                 delay(HEARTBEAT_MS)
                 RunState.beat(this@OtoListenerService)
+                // Close listens that were left paused for too long, then forget them.
+                val now = clock()
+                tracked.values.forEach { it.tracker.onIdleCheck(now) }
+                saveOpenSessions()
             }
         }
 
