@@ -29,8 +29,8 @@ import com.oto.stats.tracking.OemShortcut
 import com.oto.stats.tracking.OtoListenerService
 import com.oto.stats.tracking.TrackingStatus
 import com.oto.stats.ui.debug.DebugActions
-import com.oto.stats.ui.debug.DebugScreen
 import com.oto.stats.ui.debug.DebugState
+import com.oto.stats.ui.shell.OtoShell
 import com.oto.stats.ui.theme.OtoTheme
 
 class MainActivity : ComponentActivity() {
@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
                         batteryExempt = isBatteryExempt(),
                     )
                 }
-                DebugScreen(container = container, state = state, actions = actions)
+                OtoShell(container = container, state = state, actions = actions)
             }
         }
     }

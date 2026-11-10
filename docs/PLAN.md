@@ -151,7 +151,10 @@ Each step ends with a working APK from GitHub Actions.
 - Focus: stats, local-first (works offline; optional online enrichment for artist pictures), personal use.
 - Sharing: later.
 - Tabs: Now, Stats, History, Library (proposed by Claude).
-- Theme: charcoal black, monochrome, one accent color, semantic colors only where needed.
+- Theme: charcoal black `#111111`, monochrome, one accent: Tape Yellow `#EFD43B` (cassette tape / VU needle), semantic colors only for status.
+  Orange was dropped: warm orange/persimmon on dark is a recognizable newer-AI-model look, and purple/cyan neon is the older one.
+- Type: Bricolage Grotesque (titles, hero numbers) + IBM Plex Sans (UI, tabular numerals). Both bundled, OFL licensed, in `licenses/fonts`.
+- Accent is used once per screen (active tab, live dot, primary button), never as a wash or gradient.
 
 ## 9. Open items
 - App name and palette (see design notes).
