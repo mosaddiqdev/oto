@@ -75,7 +75,7 @@ jobs:
 
       - name: Upload signed APK
         if: env.SIGNED == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: oto-apk
           path: app/build/outputs/apk/release/oto.apk
@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload debug APK (unsigned-by-Oto, for pull requests)
         if: env.SIGNED != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: oto-debug-apk
           path: app/build/outputs/apk/debug/*.apk
