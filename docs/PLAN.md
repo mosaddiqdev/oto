@@ -132,6 +132,12 @@ Each step ends with a working APK from GitHub Actions.
 1b. **Background hardening.** BUILT, needs testing on a real phone.
    - Open listens saved every ~30 s and resumed or recovered after a process kill; boot/update receiver; 30-minute watchdog that rebinds the listener; battery-restriction card.
    - Not done on purpose: a foreground-service notification. The listener is system-bound; add one only if phone testing shows kills.
+1c. **Reliability pass** (after phone testing showed tracking stopping with screen off / after swipe-away). BUILT, needs phone testing.
+   - Listener is also a sticky `mediaPlayback` foreground service with a quiet notification (started while the app is on screen; Android 15 forbids starting it from the boot receiver).
+   - Listens are saved as soon as they count and updated every ~16 s and on pause (upsert by session id, ordered write queue).
+   - On-device diagnostics log (copyable) that also detects "last run was killed".
+   - Phone-specific background steps and shortcuts (Xiaomi, Oppo/Realme/OnePlus, Vivo, Samsung, Huawei).
+   - Known limit: phones that force-stop an app on swipe-away cannot be fixed in code; the user must lock the app in Recents and enable autostart.
 2. **Onboarding and permissions.** Includes the "Allow restricted settings" step for sideloaded APKs on Android 13+.
 3. **Design system**: colors, type, components.
 4. **Now** tab.
