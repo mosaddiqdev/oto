@@ -2,11 +2,14 @@ package com.oto.stats
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import com.oto.stats.data.ListeningRepository
 import com.oto.stats.data.OpenSessionStore
 import com.oto.stats.data.OtoDatabase
 import com.oto.stats.data.TrackingPrefs
+import com.oto.stats.diag.DiagLog
 import com.oto.stats.tracking.ListenerWatchdogWorker
+import com.oto.stats.tracking.RunState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,7 +20,7 @@ class AppContainer(context: Context) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val database = OtoDatabase.build(context)
-    val repository = ListeningRepository(database)
+    val repository = ListeningRepository(database, appScope)
     val prefs = TrackingPrefs(context)
     val openSessions = OpenSessionStore(context)
 }
@@ -28,7 +31,26 @@ class OtoApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        DiagLog.init(this)
+        logProcessStart()
         container = AppContainer(this)
         ListenerWatchdogWorker.schedule(this)
+    }
+
+    private fun logProcessStart() {
+        val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+        DiagLog.log(
+            "app",
+            "Process started · Oto $version · ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+        )
+        val previous = RunState.previous(this)
+        if (previous.aliveAtMs > 0) {
+            val ago = DiagLog.ago(System.currentTimeMillis() - previous.aliveAtMs)
+            if (previous.clean) {
+                DiagLog.log("app", "Last run ended normally (last seen $ago ago)")
+            } else {
+                DiagLog.log("app", "Last run was KILLED by the system or phone, or the app was updated (last sign of life $ago ago)")
+            }
+        }
     }
 }

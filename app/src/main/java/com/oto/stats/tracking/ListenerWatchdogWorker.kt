@@ -6,6 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.oto.stats.diag.DiagLog
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
 
@@ -24,9 +25,11 @@ class ListenerWatchdogWorker(
         if (!ListenerHealth.isAccessGranted(context)) return Result.success()
         if (TrackingStatus.listenerConnected.value) return Result.success()
 
+        DiagLog.log("watchdog", "Listener not connected; asking the system to rebind")
         ListenerHealth.requestRebind(context)
         delay(REBIND_WAIT_MS)
         if (!TrackingStatus.listenerConnected.value) {
+            DiagLog.log("watchdog", "Still not connected; toggling the component")
             ListenerHealth.toggleComponent(context)
         }
         return Result.success()

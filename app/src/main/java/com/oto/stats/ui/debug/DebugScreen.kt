@@ -29,15 +29,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.oto.stats.AppContainer
 import com.oto.stats.data.EventRow
 import com.oto.stats.data.Totals
+import com.oto.stats.diag.DiagLog
 import com.oto.stats.tracking.MusicApps
+import com.oto.stats.tracking.OemHelper
+import com.oto.stats.tracking.OemShortcut
 import com.oto.stats.tracking.TrackingStatus
 import com.oto.stats.tracking.engine.PlayState
 import com.oto.stats.ui.theme.OtoColors
@@ -46,24 +52,41 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-/** Temporary developer screen for checking the tracking engine on a real phone. */
+/** What the phone currently allows. Re-read every time the app comes back to the screen. */
+class DebugState(
+    val accessGranted: Boolean,
+    val notificationsGranted: Boolean,
+    val batteryExempt: Boolean,
+)
+
+class DebugActions(
+    val openAccessSettings: () -> Unit,
+    val requestNotifications: () -> Unit,
+    val requestBatteryExemption: () -> Unit,
+    val openAppSettings: () -> Unit,
+    val openOemShortcut: (OemShortcut) -> Unit,
+    val copyLog: () -> Unit,
+)
+
+/** Temporary developer screen for checking tracking on a real phone. */
 @Composable
 fun DebugScreen(
     container: AppContainer,
-    accessGranted: Boolean,
-    onOpenAccessSettings: () -> Unit,
-    batteryExempt: Boolean,
-    onRequestBatteryExemption: () -> Unit,
-    onOpenAppSettings: () -> Unit,
+    state: DebugState,
+    actions: DebugActions,
 ) {
+    val context = LocalContext.current
     val connected by TrackingStatus.listenerConnected.collectAsState()
+    val foreground by TrackingStatus.foreground.collectAsState()
     val nowPlaying by TrackingStatus.nowPlaying.collectAsState()
     val trackAll by container.prefs.trackAllApps.collectAsState()
     val totals by remember(container) { container.repository.totals() }
         .collectAsState(initial = Totals(0, 0L, 0))
     val events by remember(container) { container.repository.recentEvents(50) }
         .collectAsState(initial = emptyList())
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val log by DiagLog.lines.collectAsState()
+    val guide = remember { OemHelper.guide(context) }
+    val scope = rememberCoroutineScope()
 
     val insets = WindowInsets.safeDrawing.asPaddingValues()
 
@@ -88,14 +111,32 @@ fun DebugScreen(
 
         item {
             DebugCard {
-                StatusRow("Notification access", if (accessGranted) "On" else "Off", if (accessGranted) OtoColors.Success else OtoColors.Warning)
+                StatusRow("Notification access", if (state.accessGranted) "On" else "Off", if (state.accessGranted) OtoColors.Success else OtoColors.Warning)
                 StatusRow("Listener service", if (connected) "Connected" else "Not connected", if (connected) OtoColors.Success else OtoColors.TextTertiary)
-                if (!accessGranted) {
-                    Button(onClick = onOpenAccessSettings, modifier = Modifier.fillMaxWidth()) {
+                StatusRow("Keep-alive mode", if (foreground) "Active" else "Not active", if (foreground) OtoColors.Success else OtoColors.Warning)
+                StatusRow("Notifications", if (state.notificationsGranted) "Allowed" else "Blocked", if (state.notificationsGranted) OtoColors.Success else OtoColors.Warning)
+                if (!state.accessGranted) {
+                    Button(onClick = actions.openAccessSettings, modifier = Modifier.fillMaxWidth()) {
                         Text("Grant notification access")
                     }
                     Text(
                         "If the switch is greyed out: App info, then the three-dot menu, then \"Allow restricted settings\". Android blocks this for apps installed outside the Play Store.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OtoColors.TextTertiary,
+                    )
+                } else if (!foreground) {
+                    Text(
+                        "Keep-alive mode starts when this screen is open. If it stays off, copy the log below and send it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OtoColors.TextTertiary,
+                    )
+                }
+                if (!state.notificationsGranted) {
+                    Button(onClick = actions.requestNotifications, modifier = Modifier.fillMaxWidth()) {
+                        Text("Allow notifications")
+                    }
+                    Text(
+                        "Oto shows one quiet notification while it listens. Phones are much more likely to keep an app alive when they can see it.",
                         style = MaterialTheme.typography.bodySmall,
                         color = OtoColors.TextTertiary,
                     )
@@ -108,19 +149,34 @@ fun DebugScreen(
                 Text("Background protection", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 StatusRow(
                     "Battery restrictions",
-                    if (batteryExempt) "Unrestricted" else "Restricted",
-                    if (batteryExempt) OtoColors.Success else OtoColors.Warning,
+                    if (state.batteryExempt) "Unrestricted" else "Restricted",
+                    if (state.batteryExempt) OtoColors.Success else OtoColors.Warning,
                 )
-                if (!batteryExempt) {
-                    Button(onClick = onRequestBatteryExemption, modifier = Modifier.fillMaxWidth()) {
+                if (!state.batteryExempt) {
+                    Button(onClick = actions.requestBatteryExemption, modifier = Modifier.fillMaxWidth()) {
                         Text("Allow background activity")
                     }
                 }
-                OutlinedButton(onClick = onOpenAppSettings, modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text(guide.oem.label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    "Your phone has its own battery manager on top of Android. Do these too, or it can stop Oto when the screen is off or when you swipe it away:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OtoColors.TextTertiary,
+                )
+                guide.steps.forEachIndexed { index, step ->
+                    Text("${index + 1}. $step", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                guide.shortcuts.forEach { shortcut ->
+                    OutlinedButton(onClick = { actions.openOemShortcut(shortcut) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(shortcut.label)
+                    }
+                }
+                OutlinedButton(onClick = actions.openAppSettings, modifier = Modifier.fillMaxWidth()) {
                     Text("Open app settings")
                 }
                 Text(
-                    "Some phones (Xiaomi, Oppo, Vivo, OnePlus, Samsung) also need Autostart turned on and the app locked in Recents, or they stop tracking when the screen is off.",
+                    "Menu names differ a little between versions. If a button does not open the right page, follow the steps by hand.",
                     style = MaterialTheme.typography.bodySmall,
                     color = OtoColors.TextTertiary,
                 )
@@ -167,7 +223,7 @@ fun DebugScreen(
                     Column(Modifier.weight(1f)) {
                         Text("Track all apps", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                         Text(
-                            "For testing with players not on the built-in list. Messaging, browser and video apps stay blocked.",
+                            "Turn this on if your player is not on the built-in list (for example YouTube or a browser). Messaging apps stay blocked.",
                             style = MaterialTheme.typography.bodySmall,
                             color = OtoColors.TextTertiary,
                         )
@@ -195,13 +251,34 @@ fun DebugScreen(
         if (events.isEmpty()) {
             item {
                 Text(
-                    "No plays saved yet. Play a song for 25+ seconds, then pause or skip.",
+                    "No plays saved yet. Play a song for 25+ seconds. It appears here within about 15 seconds and keeps updating while it plays.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = OtoColors.TextTertiary,
                 )
             }
         } else {
             items(events, key = { it.id }) { row -> EventItem(row) }
+        }
+
+        item {
+            DebugCard {
+                Text("Diagnostics", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "What the app saw and did, newest first. If tracking fails, copy this and send it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OtoColors.TextTertiary,
+                )
+                val shown = log.takeLast(40).asReversed()
+                Text(
+                    if (shown.isEmpty()) "Nothing logged yet." else shown.joinToString("\n"),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = actions.copyLog, modifier = Modifier.weight(1f)) { Text("Copy log") }
+                    OutlinedButton(onClick = { DiagLog.clear() }, modifier = Modifier.weight(1f)) { Text("Clear log") }
+                }
+            }
         }
 
         item {

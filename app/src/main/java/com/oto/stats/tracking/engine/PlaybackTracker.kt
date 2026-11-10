@@ -16,6 +16,8 @@ class PlaybackTracker(
     private val packageName: String,
     private val rules: SessionRules = SessionRules(),
     private val newSessionId: () -> String = { UUID.randomUUID().toString() },
+    /** Called with a short reason when a listen ends but is too short to count. */
+    private val onDiscarded: (String) -> Unit = {},
     private val onFinished: (ListenResult) -> Unit,
 ) {
     private class Session(val id: String, val startedAtMs: Long) {
@@ -99,6 +101,28 @@ class PlaybackTracker(
     fun snapshot(): NowPlayingSnapshot? {
         val m = meta ?: return null
         return NowPlayingSnapshot(packageName, m, state, session?.playedMs ?: 0L, countable)
+    }
+
+    /**
+     * Progress of the open listen as a result, or null while it is still too short to count.
+     * Saving this on pause and every few seconds makes a listen appear as soon as it counts
+     * and keeps it up to date. The final result later carries the same sessionId.
+     */
+    fun snapshotResult(): ListenResult? {
+        val s = session ?: return null
+        val m = meta ?: return null
+        if (!countable) return null
+        return buildListenResult(
+            sessionId = s.id,
+            packageName = packageName,
+            meta = m,
+            startedAtMs = s.startedAtMs,
+            endedAtMs = s.lastActiveEpochMs,
+            playedMs = s.playedMs,
+            pauseCount = s.pauseCount,
+            seekCount = s.seekCount,
+            rules = rules,
+        )
     }
 
     /** The listen currently open, if any, in a form that can be saved. */
@@ -210,7 +234,14 @@ class PlaybackTracker(
             pauseCount = s.pauseCount,
             seekCount = s.seekCount,
             rules = rules,
-        ) ?: return
+        )
+        if (result == null) {
+            val known = m.durationMs?.takeIf { it > 0 }
+            onDiscarded(
+                "Too short to count: \"${m.title}\" played ${s.playedMs / 1000}s, needs ${rules.requiredPlayMs(known) / 1000}s",
+            )
+            return
+        }
         onFinished(result)
     }
 

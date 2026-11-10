@@ -1,6 +1,6 @@
 package com.oto.stats.tracking
 
-/** Which apps we listen to. Default-deny: unknown apps are ignored unless the user opts in. */
+/** Which apps we listen to. Default-deny: unknown apps are ignored unless the user turns on "Track all apps". */
 object MusicApps {
 
     val known: Map<String, String> = mapOf(
@@ -30,7 +30,11 @@ object MusicApps {
         "ru.yandex.music" to "Yandex Music",
     )
 
-    /** Never tracked, even with "track all apps": messaging, browsers and video apps. */
+    /**
+     * Never tracked, even with "Track all apps": messaging apps, whose voice notes and calls
+     * look like media. Browsers and video apps (YouTube, Chrome) are NOT here, so people who
+     * play music there can turn on "Track all apps"; the 20-minute limit filters most videos.
+     */
     val neverTrack: Set<String> = setOf(
         "com.whatsapp",
         "com.whatsapp.w4b",
@@ -39,21 +43,8 @@ object MusicApps {
         "org.thunderdog.challegram",
         "org.thoughtcrime.securesms",
         "com.facebook.orca",
-        "com.facebook.katana",
-        "com.instagram.android",
-        "com.snapchat.android",
-        "com.discord",
         "com.viber.voip",
         "com.google.android.apps.messaging",
-        "com.android.chrome",
-        "org.mozilla.firefox",
-        "com.brave.browser",
-        "com.microsoft.emmx",
-        "com.sec.android.app.sbrowser",
-        "com.google.android.youtube",
-        "com.netflix.mediaclient",
-        "in.startv.hotstar",
-        "com.amazon.avod.thirdpartyclient",
     )
 
     fun labelFor(packageName: String): String =

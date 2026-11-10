@@ -1,21 +1,28 @@
 package com.oto.stats.tracking
 
+import android.app.NotificationManager
 import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
-import android.util.Log
+import androidx.core.content.ContextCompat
 import com.oto.stats.AppContainer
 import com.oto.stats.OtoApp
+import com.oto.stats.diag.DiagLog
 import com.oto.stats.tracking.engine.Clock
 import com.oto.stats.tracking.engine.ListenResult
 import com.oto.stats.tracking.engine.Normalize
+import com.oto.stats.tracking.engine.NowPlayingSnapshot
 import com.oto.stats.tracking.engine.OpenSession
 import com.oto.stats.tracking.engine.PlayState
 import com.oto.stats.tracking.engine.PlaybackTracker
@@ -35,11 +42,15 @@ import kotlinx.coroutines.launch
  * Notification access is only used to be allowed to read active media sessions.
  * We never read notification content.
  *
+ * Staying alive, in layers:
+ * 1. The service is also a sticky foreground service with a quiet notification, so the phone
+ *    treats it as something the user is relying on and restarts it if it is killed.
+ * 2. Open listens are saved every few seconds, so a kill loses almost nothing.
+ * 3. A saved session resumes after a restart; leftovers are recovered.
+ * 4. A boot receiver and a watchdog ask the system to bind the listener again.
+ *
  * One [PlaybackTracker] per active media session, fed by MediaController callbacks
  * plus a light position ticker while something is playing.
- *
- * Open listens are saved every ~30 s. If the process is killed, the next connection
- * resumes them (same track still playing) or saves them (anything else).
  */
 class OtoListenerService : NotificationListenerService() {
 
@@ -48,24 +59,59 @@ class OtoListenerService : NotificationListenerService() {
 
     /** Saved sessions from a previous run, keyed by package, waiting for their player to show up. */
     private val pendingRestore = HashMap<String, OpenSession>()
+    private val reportedIgnored = HashSet<String>()
 
     private var container: AppContainer? = null
     private var scope: CoroutineScope? = null
     private var tickerJob: Job? = null
+    private var heartbeatJob: Job? = null
     private var sessionManager: MediaSessionManager? = null
     private var component: ComponentName? = null
 
+    private var isForeground = false
+    private var lastNotificationText: String? = null
+    private var lastForegroundError: String? = null
+
     private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
         syncSessions(controllers.orEmpty())
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        DiagLog.log("svc", "Service created")
+        promoteToForeground("created")
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        DiagLog.log("svc", "Start command (${intent?.action ?: "system restart"})")
+        // Always answer a startForegroundService() call right away, and never stop here.
+        promoteToForeground("start command")
+        return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        DiagLog.log("svc", "App swiped away from Recents")
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
         val appContainer = (application as OtoApp).container
         container = appContainer
+        DiagLog.log("svc", "Listener connected")
 
         val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scope = serviceScope
+
+        RunState.markConnected(this)
+        heartbeatJob = serviceScope.launch {
+            while (isActive) {
+                delay(HEARTBEAT_MS)
+                RunState.beat(this@OtoListenerService)
+            }
+        }
+
+        promoteToForeground("listener connected")
 
         pendingRestore.clear()
         appContainer.openSessions.all().forEach { pendingRestore[it.packageName] = it }
@@ -79,13 +125,14 @@ class OtoListenerService : NotificationListenerService() {
             manager.addOnActiveSessionsChangedListener(sessionsListener, name, handler)
             syncSessions(manager.getActiveSessions(name))
         } catch (e: SecurityException) {
-            Log.w(TAG, "Notification access is not granted", e)
+            DiagLog.log("svc", "Cannot read media sessions: notification access is missing")
         }
 
         // Anything saved for a player that is no longer active has ended: save it now.
         recoverLeftovers()
 
         TrackingStatus.listenerConnected.value = true
+        DiagLog.log("svc", "Ready · tracking ${tracked.size} player(s)")
 
         // Re-scan when the user toggles "track all apps".
         serviceScope.launch {
@@ -94,24 +141,71 @@ class OtoListenerService : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        DiagLog.log("svc", "Listener disconnected by the system")
         teardown()
+        if (ListenerHealth.isAccessGranted(this)) {
+            ListenerHealth.requestRebind(this)
+        } else {
+            DiagLog.log("svc", "Notification access was turned off; stopping")
+            runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+            isForeground = false
+            TrackingStatus.foreground.value = false
+            stopSelf()
+        }
         super.onListenerDisconnected()
     }
 
     override fun onDestroy() {
+        DiagLog.log("svc", "Service destroyed")
         teardown()
+        isForeground = false
+        TrackingStatus.foreground.value = false
         super.onDestroy()
+    }
+
+    /** Shows the quiet notification and enters foreground mode. Safe to call repeatedly. */
+    private fun promoteToForeground(reason: String) {
+        try {
+            val text = lastNotificationText ?: IDLE_TEXT
+            val notification = ServiceNotification.build(this, text)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    ServiceNotification.ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+                )
+            } else {
+                startForeground(ServiceNotification.ID, notification)
+            }
+            lastNotificationText = text
+            if (!isForeground) DiagLog.log("svc", "Foreground mode ON ($reason)")
+            isForeground = true
+            lastForegroundError = null
+        } catch (e: Exception) {
+            // The system can refuse when the app is in the background. Opening the app retries.
+            isForeground = false
+            val summary = "${e.javaClass.simpleName}: ${e.message?.take(100)}"
+            if (summary != lastForegroundError) {
+                DiagLog.log("svc", "Foreground mode refused ($reason): $summary")
+            }
+            lastForegroundError = summary
+        }
+        TrackingStatus.foreground.value = isForeground
     }
 
     private fun teardown() {
         tickerJob?.cancel()
         tickerJob = null
+        heartbeatJob?.cancel()
+        heartbeatJob = null
         runCatching { sessionManager?.removeOnActiveSessionsChangedListener(sessionsListener) }
         tracked.values.toList().forEach { it.stop() }
         tracked.clear()
         // Everything was closed and handed to the database, so nothing is left open.
         container?.openSessions?.clear()
         pendingRestore.clear()
+        reportedIgnored.clear()
+        RunState.markClean(this)
         scope?.cancel()
         scope = null
         TrackingStatus.listenerConnected.value = false
@@ -121,16 +215,25 @@ class OtoListenerService : NotificationListenerService() {
     private fun resync() {
         val manager = sessionManager ?: return
         val name = component ?: return
+        reportedIgnored.clear()
         try {
             syncSessions(manager.getActiveSessions(name))
         } catch (e: SecurityException) {
-            Log.w(TAG, "Cannot read sessions", e)
+            DiagLog.log("svc", "Cannot read media sessions")
         }
     }
 
     /** Makes the set of tracked sessions match the allowed active sessions. */
     private fun syncSessions(controllers: List<MediaController>) {
         val prefs = container?.prefs ?: return
+
+        for (controller in controllers) {
+            val pkg = controller.packageName
+            if (!prefs.isAllowed(pkg) && reportedIgnored.add(pkg)) {
+                DiagLog.log("sync", "Ignoring media from $pkg (${prefs.blockReason(pkg)})")
+            }
+        }
+
         val allowed = controllers.filter { prefs.isAllowed(it.packageName) }
         val liveTokens = allowed.map { it.sessionToken }.toSet()
 
@@ -139,6 +242,7 @@ class OtoListenerService : NotificationListenerService() {
         for (controller in allowed) {
             val token = controller.sessionToken
             if (token !in tracked) {
+                DiagLog.log("sync", "Tracking ${MusicApps.labelFor(controller.packageName)}")
                 val session = TrackedSession(controller)
                 tracked[token] = session
                 session.start(pendingRestore.remove(controller.packageName))
@@ -160,7 +264,11 @@ class OtoListenerService : NotificationListenerService() {
         if (pendingRestore.isEmpty()) return
         val now = System.currentTimeMillis()
         for (open in pendingRestore.values) {
-            SessionRecovery.toResult(open, now)?.let { persist(it) }
+            val result = SessionRecovery.toResult(open, now)
+            if (result != null) {
+                DiagLog.log("svc", "Recovered an unfinished listen: ${open.meta.title}")
+                submit(result)
+            }
         }
         pendingRestore.clear()
         saveOpenSessions()
@@ -168,14 +276,36 @@ class OtoListenerService : NotificationListenerService() {
 
     private fun publish() {
         val snapshots = tracked.values.mapNotNull { it.tracker.snapshot() }
-        TrackingStatus.nowPlaying.value =
-            snapshots.firstOrNull { it.state == PlayState.PLAYING }
-                ?: snapshots.firstOrNull { it.state == PlayState.PAUSED }
+        val current = snapshots.firstOrNull { it.state == PlayState.PLAYING }
+            ?: snapshots.firstOrNull { it.state == PlayState.PAUSED }
+        TrackingStatus.nowPlaying.value = current
+        updateNotificationText(current)
+    }
+
+    private fun updateNotificationText(current: NowPlayingSnapshot?) {
+        if (!isForeground) return
+        val text = if (current != null && current.state == PlayState.PLAYING) {
+            "${current.meta.title} · ${current.meta.artist}"
+        } else {
+            IDLE_TEXT
+        }
+        if (text == lastNotificationText) return
+        lastNotificationText = text
+        runCatching {
+            getSystemService(NotificationManager::class.java)
+                .notify(ServiceNotification.ID, ServiceNotification.build(this, text))
+        }
     }
 
     private fun saveOpenSessions() {
         val store = container?.openSessions ?: return
         store.replaceAll(tracked.values.mapNotNull { it.tracker.openSession() })
+    }
+
+    /** Saves the progress of every open listen, so it shows up and survives a kill. */
+    private fun checkpoint() {
+        tracked.values.forEach { session -> session.tracker.snapshotResult()?.let { submit(it) } }
+        saveOpenSessions()
     }
 
     /** Runs the position ticker only while something is playing. */
@@ -189,34 +319,34 @@ class OtoListenerService : NotificationListenerService() {
                     delay(TICK_MS)
                     tracked.values.forEach { it.tick() }
                     publish()
-                    if (++ticks % SAVE_EVERY_TICKS == 0) saveOpenSessions()
+                    if (++ticks % CHECKPOINT_EVERY_TICKS == 0) checkpoint()
                 }
             }
         }
     }
 
-    private fun persist(result: ListenResult) {
-        val appContainer = container ?: return
-        appContainer.appScope.launch {
-            try {
-                appContainer.repository.record(result)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to save listen", e)
-            }
-        }
+    private fun submit(result: ListenResult) {
+        container?.repository?.submit(result)
     }
 
     private fun clock() = Clock(SystemClock.elapsedRealtime(), System.currentTimeMillis())
 
     private inner class TrackedSession(private val controller: MediaController) {
-        val tracker = PlaybackTracker(controller.packageName) { persist(it) }
+        private val label = MusicApps.labelFor(controller.packageName)
+        private var lastLoggedState: PlayState? = null
+        private var lastLoggedTrack: String? = null
+
+        val tracker = PlaybackTracker(
+            controller.packageName,
+            onDiscarded = { DiagLog.log("play", it) },
+        ) { submit(it) }
 
         private val callback = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 handleState(state)
                 publish()
                 updateTicker()
-                saveOpenSessions()
+                checkpoint()
             }
 
             override fun onMetadataChanged(metadata: MediaMetadata?) {
@@ -251,20 +381,53 @@ class OtoListenerService : NotificationListenerService() {
         }
 
         private fun handleMetadata(metadata: MediaMetadata?) {
-            tracker.onMetadata(metadata?.toTrackMeta(), clock())
+            val meta = metadata?.toTrackMeta()
+            if (meta != null) {
+                val key = "${meta.title}|${meta.artist}"
+                if (key != lastLoggedTrack) {
+                    lastLoggedTrack = key
+                    val length = meta.durationMs?.let { " (${it / 60_000}:%02d)".format(it / 1000 % 60) } ?: ""
+                    DiagLog.log("play", "$label: ${meta.title} · ${meta.artist}$length")
+                }
+            }
+            tracker.onMetadata(meta, clock())
         }
 
         private fun handleState(state: PlaybackState?) {
             val mapped = mapState(state) ?: return
+            if (mapped != lastLoggedState) {
+                lastLoggedState = mapped
+                DiagLog.log("play", "$label: ${mapped.name.lowercase()}")
+            }
             val now = clock()
             tracker.onPlaybackState(mapped, positionOf(state!!, now), state.playbackSpeed, now)
         }
     }
 
-    private companion object {
-        const val TAG = "OtoListener"
-        const val TICK_MS = 4_000L
-        const val SAVE_EVERY_TICKS = 8 // about every 32 seconds
+    companion object {
+        const val ACTION_ENSURE_FOREGROUND = "com.oto.stats.ENSURE_FOREGROUND"
+
+        private const val TICK_MS = 4_000L
+        private const val CHECKPOINT_EVERY_TICKS = 4 // about every 16 seconds
+        private const val HEARTBEAT_MS = 60_000L
+        private const val IDLE_TEXT = "Listening for music"
+
+        /**
+         * Starts the service in foreground mode. Call only while the app is on screen: from
+         * the background the system may refuse, and a boot receiver is not allowed to start
+         * a media-playback foreground service on Android 15 and later.
+         */
+        fun ensureForeground(context: Context) {
+            if (!ListenerHealth.isAccessGranted(context)) return
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, OtoListenerService::class.java).setAction(ACTION_ENSURE_FOREGROUND),
+                )
+            } catch (e: Exception) {
+                DiagLog.log("svc", "Could not start the service: ${e.javaClass.simpleName} ${e.message?.take(100)}")
+            }
+        }
     }
 }
 

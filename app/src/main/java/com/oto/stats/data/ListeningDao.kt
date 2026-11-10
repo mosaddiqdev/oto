@@ -30,9 +30,52 @@ abstract class ListeningDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertEvent(event: ListeningEventEntity): Long
 
+    @Query("SELECT id AS id, trackId AS trackId FROM listening_events WHERE sessionId = :sessionId")
+    abstract suspend fun eventBySession(sessionId: String): EventRef?
+
+    @Query(
+        """
+        UPDATE listening_events
+        SET trackId = :trackId,
+            endedAt = :endedAt,
+            playedMs = :playedMs,
+            durationMs = :durationMs,
+            durationEstimated = :durationEstimated,
+            completionPct = :completionPct,
+            skipped = :skipped,
+            pauseCount = :pauseCount,
+            seekCount = :seekCount
+        WHERE id = :id
+        """,
+    )
+    abstract suspend fun updateEvent(
+        id: Long,
+        trackId: Long,
+        endedAt: Long,
+        playedMs: Long,
+        durationMs: Long,
+        durationEstimated: Boolean,
+        completionPct: Int,
+        skipped: Boolean,
+        pauseCount: Int,
+        seekCount: Int,
+    )
+
+    @Query(
+        """
+        DELETE FROM tracks
+        WHERE id = :trackId
+          AND NOT EXISTS (SELECT 1 FROM listening_events WHERE trackId = :trackId)
+        """,
+    )
+    abstract suspend fun deleteTrackIfUnused(trackId: Long)
+
     /**
-     * Saves one finished listen: finds or creates the track and its artists, then the event.
-     * Returns false if the session was already saved (duplicate).
+     * Saves a listen, or updates it if this session was already saved.
+     *
+     * A listen is saved as soon as it is long enough to count and then kept up to date while
+     * it plays, so it shows up right away and survives the app being killed.
+     * Returns true when a new listen was added, false when an existing one was updated.
      */
     @Transaction
     open suspend fun recordListen(
@@ -67,24 +110,43 @@ abstract class ListeningDao {
             insertTrackArtists(links)
         }
 
-        val eventId = insertEvent(
-            ListeningEventEntity(
-                trackId = trackId,
-                startedAt = result.startedAtMs,
-                endedAt = result.endedAtMs,
-                playedMs = result.playedMs,
-                durationMs = result.durationMs,
-                durationEstimated = result.durationEstimated,
-                completionPct = result.completionPct,
-                sourcePackage = result.packageName,
-                skipped = result.skipped,
-                pauseCount = result.pauseCount,
-                seekCount = result.seekCount,
-                sessionId = result.sessionId,
-                tzOffsetMinutes = tzOffsetMinutes,
-            ),
+        val existing = eventBySession(result.sessionId)
+        if (existing == null) {
+            val eventId = insertEvent(
+                ListeningEventEntity(
+                    trackId = trackId,
+                    startedAt = result.startedAtMs,
+                    endedAt = result.endedAtMs,
+                    playedMs = result.playedMs,
+                    durationMs = result.durationMs,
+                    durationEstimated = result.durationEstimated,
+                    completionPct = result.completionPct,
+                    sourcePackage = result.packageName,
+                    skipped = result.skipped,
+                    pauseCount = result.pauseCount,
+                    seekCount = result.seekCount,
+                    sessionId = result.sessionId,
+                    tzOffsetMinutes = tzOffsetMinutes,
+                ),
+            )
+            return eventId != -1L
+        }
+
+        updateEvent(
+            id = existing.id,
+            trackId = trackId,
+            endedAt = result.endedAtMs,
+            playedMs = result.playedMs,
+            durationMs = result.durationMs,
+            durationEstimated = result.durationEstimated,
+            completionPct = result.completionPct,
+            skipped = result.skipped,
+            pauseCount = result.pauseCount,
+            seekCount = result.seekCount,
         )
-        return eventId != -1L
+        // The artist can arrive late, which changes the track identity. Drop the empty leftover.
+        if (existing.trackId != trackId) deleteTrackIfUnused(existing.trackId)
+        return false
     }
 
     @Query(

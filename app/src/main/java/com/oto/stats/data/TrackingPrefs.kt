@@ -12,6 +12,13 @@ class TrackingPrefs(context: Context) {
     private val _trackAllApps = MutableStateFlow(prefs.getBoolean(KEY_TRACK_ALL, false))
     val trackAllApps: StateFlow<Boolean> = _trackAllApps
 
+    /** Whether the notification permission prompt was already shown once. */
+    var notificationsAsked: Boolean
+        get() = prefs.getBoolean(KEY_NOTIF_ASKED, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_NOTIF_ASKED, value).apply()
+        }
+
     fun setTrackAllApps(value: Boolean) {
         prefs.edit().putBoolean(KEY_TRACK_ALL, value).apply()
         _trackAllApps.value = value
@@ -22,7 +29,15 @@ class TrackingPrefs(context: Context) {
         return _trackAllApps.value || packageName in MusicApps.known
     }
 
+    fun blockReason(packageName: String): String =
+        if (packageName in MusicApps.neverTrack) {
+            "messaging app, never tracked"
+        } else {
+            "not on the music app list; turn on Track all apps to include it"
+        }
+
     private companion object {
         const val KEY_TRACK_ALL = "track_all_apps"
+        const val KEY_NOTIF_ASKED = "notifications_asked"
     }
 }

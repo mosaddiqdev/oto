@@ -91,6 +91,12 @@ data class ListeningEventEntity(
     val tzOffsetMinutes: Int,
 )
 
+/** Points at an already saved listen, so progress can update it instead of adding a duplicate. */
+data class EventRef(
+    val id: Long,
+    val trackId: Long,
+)
+
 /** Flat row for the recent-plays list. */
 data class EventRow(
     val id: Long,
