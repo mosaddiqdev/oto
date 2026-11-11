@@ -36,6 +36,13 @@ import com.oto.stats.ui.theme.OtoColors
 const val HEADER_CONTENT_DP = 64
 
 /**
+ * The page is laid out this much taller than the screen, upward. Content that has just scrolled
+ * off the top is still drawn there, so the glass header always has real pixels to blur at its
+ * top edge instead of fading out over an empty strip.
+ */
+const val OVERSCAN_DP = 48
+
+/**
  * Reports how far a list has scrolled as 0..1 so the glass header can morph in.
  * [fadeDp] is the scroll distance over which it goes from clear to full glass.
  */
@@ -65,7 +72,7 @@ fun ScreenColumn(
         modifier = modifier
             .fillMaxSize()
             .background(OtoColors.Canvas),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 8.dp, bottom = 210.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = OVERSCAN_DP.dp + top + 8.dp, bottom = 210.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         content = content,
     )

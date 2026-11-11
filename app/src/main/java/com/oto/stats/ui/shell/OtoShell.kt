@@ -73,6 +73,7 @@ import com.kyant.backdrop.effects.vibrancy
 import com.oto.stats.AppContainer
 import com.oto.stats.ui.components.ComingSoon
 import com.oto.stats.ui.components.NavGlyph
+import com.oto.stats.ui.components.OVERSCAN_DP
 import com.oto.stats.ui.components.NavIcon
 import com.oto.stats.ui.debug.DebugActions
 import com.oto.stats.ui.debug.DebugScreen
@@ -120,7 +121,7 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
 
     Box(Modifier.fillMaxSize().background(OtoColors.Canvas)) {
         // Everything inside this box is what the glass pieces bend and blur.
-        Box(Modifier.fillMaxSize().layerBackdrop(backdrop).background(OtoColors.Canvas)) {
+        Box(Modifier.fillMaxSize().extendUp(OVERSCAN_DP.dp).layerBackdrop(backdrop).background(OtoColors.Canvas)) {
             when (tab) {
                 Tab.Now -> NowScreen(container = container, state = state, headerProgress = headerProgress, onGrantAccess = actions.openAccessSettings)
                 Tab.Stats -> ComingSoon(headerProgress, "Your top artists, tracks and listening hours over any period.")

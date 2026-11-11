@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.MutableFloatState
+import com.oto.stats.ui.components.OVERSCAN_DP
 import com.oto.stats.ui.components.TrackHeaderProgress
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -112,7 +113,7 @@ fun NowScreen(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 130.dp),
+        contentPadding = PaddingValues(top = OVERSCAN_DP.dp, bottom = 130.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
