@@ -289,10 +289,20 @@ class OtoListenerService : NotificationListenerService() {
             ?: snapshots.firstOrNull { it.state == PlayState.PAUSED }
         // Stamped so the screen can keep the counter moving between the 4 second ticks.
         TrackingStatus.nowPlaying.value = current?.copy(atElapsedMs = SystemClock.elapsedRealtime())
-        TrackingStatus.artwork.value = current?.let { c ->
+        val art = current?.let { c ->
             tracked.values.firstOrNull { it.tracker.snapshot()?.packageName == c.packageName }?.art
         }
+        TrackingStatus.artwork.value = art
+        if (current != null && art != null) keepArt(current, art)
         updateNotificationText(current)
+    }
+
+    /** Keeps a small copy of the cover on disk, so History can show it long after the song ends. */
+    private fun keepArt(current: NowPlayingSnapshot, art: Bitmap) {
+        val c = container ?: return
+        val key = Normalize.trackIdentity(current.meta.title, current.meta.artist)
+        if (c.artStore.isKnown(key)) return
+        c.appScope.launch { c.artStore.saveIfMissing(key, art) }
     }
 
     private fun updateNotificationText(current: NowPlayingSnapshot?) {

@@ -18,3 +18,15 @@ fun hoursMinutes(ms: Long): String {
     val m = minutes % 60
     return if (h > 0) String.format(Locale.US, "%dh %02dm", h, m) else "${m}m"
 }
+
+/** "Just now", "5m ago", "3h ago", "Yesterday", "4d ago". */
+fun timeAgo(thenMs: Long, nowMs: Long = System.currentTimeMillis()): String {
+    val minutes = ((nowMs - thenMs) / 60_000).coerceAtLeast(0)
+    return when {
+        minutes < 1 -> "Just now"
+        minutes < 60 -> "${minutes}m ago"
+        minutes < 24 * 60 -> "${minutes / 60}h ago"
+        minutes < 48 * 60 -> "Yesterday"
+        else -> "${minutes / (24 * 60)}d ago"
+    }
+}

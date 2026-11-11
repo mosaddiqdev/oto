@@ -1,5 +1,6 @@
 package com.oto.stats
 
+import com.oto.stats.data.ArtStore
 import android.app.Application
 import android.content.Context
 import android.os.Build
@@ -23,6 +24,7 @@ class AppContainer(context: Context) {
     val repository = ListeningRepository(database, appScope)
     val prefs = TrackingPrefs(context)
     val openSessions = OpenSessionStore(context)
+    val artStore = ArtStore(context)
 }
 
 class OtoApp : Application() {

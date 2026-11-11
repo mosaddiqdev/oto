@@ -56,6 +56,8 @@ class ListeningRepository(
 
     fun totals(): Flow<Totals> = dao.totals()
 
+    fun dailyTotals(sinceMs: Long, tzOffsetMs: Long): Flow<List<DayTotal>> = dao.dailyTotals(sinceMs, tzOffsetMs)
+
     suspend fun clearAll() = withContext(Dispatchers.IO) { db.clearAllTables() }
 
     private fun formatMs(ms: Long): String {

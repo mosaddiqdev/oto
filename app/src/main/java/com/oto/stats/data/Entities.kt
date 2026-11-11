@@ -107,6 +107,15 @@ data class EventRow(
     val completionPct: Int,
     val skipped: Boolean,
     val startedAt: Long,
+    val identityKey: String,
+    val sessionId: String,
+)
+
+/** Listening time and number of listens on one local calendar day (days since 1970-01-01). */
+data class DayTotal(
+    val day: Long,
+    val playedMs: Long,
+    val plays: Int,
 )
 
 data class Totals(

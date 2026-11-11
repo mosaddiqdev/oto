@@ -102,7 +102,7 @@ class PlaybackTracker(
 
     fun snapshot(): NowPlayingSnapshot? {
         val m = meta ?: return null
-        return NowPlayingSnapshot(packageName, m, state, session?.playedMs ?: 0L, countable)
+        return NowPlayingSnapshot(packageName, m, state, session?.playedMs ?: 0L, countable, sessionId = session?.id)
     }
 
     /**

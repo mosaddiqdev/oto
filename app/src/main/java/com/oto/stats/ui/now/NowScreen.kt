@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
@@ -51,19 +52,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.oto.stats.AppContainer
-import com.oto.stats.data.Totals
+import com.oto.stats.data.EventRow
 import com.oto.stats.tracking.MusicApps
 import com.oto.stats.tracking.TrackingStatus
 import com.oto.stats.tracking.engine.NowPlayingSnapshot
 import com.oto.stats.tracking.engine.PlayState
 import com.oto.stats.ui.components.Equalizer
 import com.oto.stats.ui.components.OtoCard
+import com.oto.stats.ui.components.TrackCover
+import com.oto.stats.ui.components.timeAgo
 import com.oto.stats.ui.components.SectionLabel
 import com.oto.stats.ui.components.clock
 import com.oto.stats.ui.components.hoursMinutes
 import com.oto.stats.ui.debug.DebugState
 import com.oto.stats.ui.theme.OtoColors
 import com.oto.stats.ui.theme.OtoNumbers
+import java.util.TimeZone
 import kotlinx.coroutines.delay
 
 @Composable
@@ -75,85 +79,227 @@ fun NowScreen(
 ) {
     val snapshot by TrackingStatus.nowPlaying.collectAsState()
     val art by TrackingStatus.artwork.collectAsState()
-    val totals by remember(container) { container.repository.totals() }
-        .collectAsState(initial = Totals(0, 0L, 0))
-    val recent by remember(container) { container.repository.recentEvents(5) }
-        .collectAsState(initial = emptyList())
     val artBitmap = remember(art) { art?.asImageBitmap() }
-    val countedMs = rememberLiveCountedMs(snapshot)
-    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    Box(Modifier.fillMaxSize()) {
-        // The cover, blurred into a glow that fades into the charcoal canvas.
-        if (artBitmap != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Image(
-                bitmap = artBitmap,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(520.dp)
-                    .blur(90.dp)
-                    .alpha(0.45f),
-            )
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(520.dp)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, OtoColors.Canvas))),
+    // The week window follows the calendar day, so it rolls over at midnight.
+    val tzOffsetMs = TimeZone.getDefault().getOffset(System.currentTimeMillis()).toLong()
+    val today = (System.currentTimeMillis() + tzOffsetMs) / DAY_MS
+    val week by remember(container, today) {
+        container.repository.dailyTotals((today - 6) * DAY_MS - tzOffsetMs, tzOffsetMs)
+    }.collectAsState(initial = emptyList())
+    val finished by remember(container) { container.repository.recentEvents(8) }
+        .collectAsState(initial = emptyList())
+    // The listen in progress is saved too, but it belongs in the hero, not in the history.
+    val recent = finished.filter { it.sessionId != snapshot?.sessionId }.take(6)
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 130.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+        item {
+            Hero(
+                snapshot = snapshot,
+                art = artBitmap,
+                needsAttention = !state.accessGranted || !state.notificationsGranted || !state.batteryExempt,
+                onOpenSetup = onOpenSetup,
             )
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = top + 12.dp, bottom = 130.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
+        if (!state.accessGranted) {
+            item { Box(Modifier.padding(horizontal = 24.dp)) { AccessCard(onGrantAccess) } }
+        }
+
+        snapshot?.let { current ->
+            item { ListenMeter(current, Modifier.padding(horizontal = 24.dp)) }
+        }
+
+        item { Box(Modifier.padding(horizontal = 24.dp)) { WeekCard(week, today) } }
+
+        if (recent.isNotEmpty()) {
             item {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Now", style = MaterialTheme.typography.headlineLarge, color = OtoColors.TextPrimary)
-                    SetupPill(needsAttention = !state.accessGranted || !state.notificationsGranted || !state.batteryExempt, onClick = onOpenSetup)
-                }
-            }
-
-            if (!state.accessGranted) {
-                item { AccessCard(onGrantAccess) }
-            }
-
-            item { Cover(snapshot, artBitmap) }
-            item { TrackInfo(snapshot) }
-            if (snapshot != null) item { ListenMeter(snapshot!!, countedMs) }
-
-            item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Tile("Listens", totals.plays.toString(), Modifier.weight(1f))
-                    Tile("Time", hoursMinutes(totals.totalPlayedMs), Modifier.weight(1f))
-                    Tile("Tracks", totals.uniqueTracks.toString(), Modifier.weight(1f))
-                }
-            }
-
-            if (recent.isNotEmpty()) {
-                item { SectionLabel("Recent") }
-                item {
-                    OtoCard {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    Text("Recent", style = MaterialTheme.typography.headlineSmall, color = OtoColors.TextPrimary)
+                    Column(Modifier.padding(top = 8.dp)) {
                         recent.forEachIndexed { i, row ->
-                            if (i > 0) HorizontalDivider(color = OtoColors.Hairline, modifier = Modifier.padding(vertical = 12.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(row.title, style = MaterialTheme.typography.titleSmall, color = OtoColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(row.artist, style = MaterialTheme.typography.bodySmall, color = OtoColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                Text(clock(row.playedMs), style = OtoNumbers.Body, color = OtoColors.TextSecondary, modifier = Modifier.padding(start = 12.dp))
-                            }
+                            if (i > 0) HorizontalDivider(color = OtoColors.Hairline, modifier = Modifier.padding(start = 64.dp))
+                            RecentRow(row, container)
                         }
                     }
                 }
             }
         }
+    }
+}
+
+private const val DAY_MS = 86_400_000L
+
+@Composable
+private fun RecentRow(row: EventRow, container: AppContainer) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        TrackCover(row.identityKey, row.title, container.artStore, 48.dp)
+        Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+            Text(row.title, style = MaterialTheme.typography.titleSmall, color = OtoColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                if (row.skipped) row.artist + " · skipped" else row.artist,
+                style = MaterialTheme.typography.bodySmall,
+                color = OtoColors.TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(clock(row.playedMs), style = OtoNumbers.Body, color = OtoColors.TextPrimary)
+            Text(timeAgo(row.startedAt + row.playedMs), style = MaterialTheme.typography.labelSmall, color = OtoColors.TextTertiary)
+        }
+    }
+}
+
+/**
+ * Edge-to-edge cover that fades into the canvas, with the track written over its lower part.
+ * Controls float on top as dark glass pills so they stay readable on any artwork.
+ */
+@Composable
+private fun Hero(
+    snapshot: NowPlayingSnapshot?,
+    art: androidx.compose.ui.graphics.ImageBitmap?,
+    needsAttention: Boolean,
+    onOpenSetup: () -> Unit,
+) {
+    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val playing = snapshot?.state == PlayState.PLAYING
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.92f),
+    ) {
+        if (art != null) {
+            Image(
+                bitmap = art,
+                contentDescription = "Cover of ${snapshot?.meta?.title.orEmpty()}",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Brush.linearGradient(listOf(OtoColors.Surface3, OtoColors.Canvas))),
+            )
+            Canvas(Modifier.fillMaxSize()) {
+                val center = Offset(size.width / 2f, size.height * 0.4f)
+                for (i in 1..6) {
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.04f),
+                        radius = size.width * 0.12f * i,
+                        center = center,
+                        style = Stroke(1.dp.toPx()),
+                    )
+                }
+            }
+            val initial = snapshot?.meta?.title?.firstOrNull { it.isLetterOrDigit() }?.uppercase()
+            Box(Modifier.fillMaxSize().padding(bottom = 90.dp), contentAlignment = Alignment.Center) {
+                if (initial != null) {
+                    Text(initial, style = MaterialTheme.typography.displayLarge.copy(fontSize = 120.sp, lineHeight = 120.sp), color = OtoColors.TextTertiary)
+                } else {
+                    Equalizer(active = false, color = OtoColors.TextTertiary, modifier = Modifier.size(36.dp))
+                }
+            }
+        }
+
+        // Darkens the top for the status bar and fades the bottom into the canvas.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.40f),
+                        0.22f to Color.Transparent,
+                        0.50f to Color.Transparent,
+                        0.80f to OtoColors.Canvas.copy(alpha = 0.80f),
+                        1f to OtoColors.Canvas,
+                    ),
+                ),
+        )
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = top + 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            if (snapshot != null) {
+                GlassPill {
+                    Equalizer(active = playing, color = if (playing) OtoColors.Accent else Color.White.copy(alpha = 0.7f), modifier = Modifier.size(width = 14.dp, height = 12.dp))
+                    Text(
+                        (if (playing) "Playing" else "Paused") + " · " + MusicApps.labelFor(snapshot.packageName),
+                        modifier = Modifier.padding(start = 8.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                    )
+                }
+            } else {
+                Text("Now", style = MaterialTheme.typography.titleLarge, color = OtoColors.TextPrimary)
+            }
+            GlassPill(onClick = onOpenSetup) {
+                if (needsAttention) {
+                    Box(Modifier.size(7.dp).background(OtoColors.Warning, CircleShape))
+                    Box(Modifier.size(6.dp))
+                }
+                Text("Setup", style = MaterialTheme.typography.labelMedium, color = Color.White)
+            }
+        }
+
+        Column(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
+        ) {
+            if (snapshot == null) {
+                Text("Nothing playing", style = MaterialTheme.typography.headlineLarge, color = OtoColors.TextPrimary)
+                Text(
+                    "Play something in any music app. Oto picks it up on its own.",
+                    modifier = Modifier.padding(top = 4.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = OtoColors.TextSecondary,
+                )
+            } else {
+                Text(
+                    snapshot.meta.title,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = OtoColors.TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (snapshot.meta.artist.isNotBlank()) {
+                    Text(
+                        snapshot.meta.artist,
+                        modifier = Modifier.padding(top = 2.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = OtoColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlassPill(onClick: (() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
+    val inner: @Composable () -> Unit = {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+    if (onClick != null) {
+        Surface(onClick = onClick, shape = CircleShape, color = Color.Black.copy(alpha = 0.38f), content = inner)
+    } else {
+        Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.38f), content = inner)
     }
 }
 
@@ -180,23 +326,6 @@ private fun rememberLiveCountedMs(snapshot: NowPlayingSnapshot?): Long {
 }
 
 @Composable
-private fun SetupPill(needsAttention: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = Color.White.copy(alpha = 0.08f),
-    ) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (needsAttention) {
-                Box(Modifier.size(7.dp).background(OtoColors.Warning, CircleShape))
-                Box(Modifier.size(6.dp))
-            }
-            Text("Setup", style = MaterialTheme.typography.labelLarge, color = OtoColors.TextSecondary)
-        }
-    }
-}
-
-@Composable
 private fun AccessCard(onGrant: () -> Unit) {
     OtoCard {
         Text("Oto can't see your music yet", style = MaterialTheme.typography.titleMedium, color = OtoColors.TextPrimary)
@@ -214,113 +343,26 @@ private fun AccessCard(onGrant: () -> Unit) {
     }
 }
 
-/** The cover, large and square. Without art it shows a calm placeholder instead of a broken image. */
-@Composable
-private fun Cover(snapshot: NowPlayingSnapshot?, art: androidx.compose.ui.graphics.ImageBitmap?) {
-    val shape = RoundedCornerShape(32.dp)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .shadow(28.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
-            .clip(shape)
-            .background(Brush.linearGradient(listOf(OtoColors.Surface3, OtoColors.Surface1))),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (art != null) {
-            Image(
-                bitmap = art,
-                contentDescription = "Cover of ${snapshot?.meta?.title.orEmpty()}",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Canvas(Modifier.fillMaxSize()) {
-                val center = Offset(size.width / 2f, size.height / 2f)
-                val rings = 5
-                for (i in 1..rings) {
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.045f),
-                        radius = size.minDimension * 0.1f * i,
-                        center = center,
-                        style = Stroke(1.dp.toPx()),
-                    )
-                }
-            }
-            val initial = snapshot?.meta?.title?.firstOrNull { it.isLetterOrDigit() }?.uppercase()
-            if (initial != null) {
-                Text(initial, style = MaterialTheme.typography.displayLarge.copy(fontSize = 120.sp, lineHeight = 120.sp), color = OtoColors.TextTertiary)
-            } else {
-                Equalizer(active = false, color = OtoColors.TextTertiary, modifier = Modifier.size(34.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun TrackInfo(snapshot: NowPlayingSnapshot?) {
-    if (snapshot == null) {
-        Column {
-            Text("Nothing playing", style = MaterialTheme.typography.headlineMedium, color = OtoColors.TextPrimary)
-            Text(
-                "Play something in any music app. Oto picks it up on its own.",
-                modifier = Modifier.padding(top = 6.dp),
-                style = MaterialTheme.typography.bodyLarge,
-                color = OtoColors.TextSecondary,
-            )
-        }
-        return
-    }
-    val playing = snapshot.state == PlayState.PLAYING
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Equalizer(active = playing, color = if (playing) OtoColors.Accent else OtoColors.TextTertiary, modifier = Modifier.size(width = 14.dp, height = 12.dp))
-            Text(
-                (if (playing) "Playing" else "Paused") + " · " + MusicApps.labelFor(snapshot.packageName),
-                modifier = Modifier.padding(start = 8.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = OtoColors.TextSecondary,
-            )
-        }
-        Text(
-            snapshot.meta.title,
-            modifier = Modifier.padding(top = 10.dp),
-            style = MaterialTheme.typography.headlineMedium,
-            color = OtoColors.TextPrimary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (snapshot.meta.artist.isNotBlank()) {
-            Text(
-                snapshot.meta.artist,
-                modifier = Modifier.padding(top = 2.dp),
-                style = MaterialTheme.typography.bodyLarge,
-                color = OtoColors.TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
 /** How long you have listened to this track, and how much of it that is. */
 @Composable
-private fun ListenMeter(snapshot: NowPlayingSnapshot, countedMs: Long) {
+private fun ListenMeter(snapshot: NowPlayingSnapshot, modifier: Modifier = Modifier) {
+    val countedMs = rememberLiveCountedMs(snapshot)
     if (!snapshot.countable) {
         Text(
             "This one isn't counted: the app or the content is filtered out.",
+            modifier = modifier,
             style = MaterialTheme.typography.bodyMedium,
             color = OtoColors.Warning,
         )
         return
     }
     val duration = snapshot.meta.durationMs?.takeIf { it > 0 }
-    Column {
+    Column(modifier) {
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(clock(countedMs), style = OtoNumbers.Hero, color = OtoColors.TextPrimary)
+            Text(clock(countedMs), style = OtoNumbers.Large, color = OtoColors.TextPrimary)
             Text(
                 "listened",
-                modifier = Modifier.padding(start = 10.dp, bottom = 10.dp),
+                modifier = Modifier.padding(start = 10.dp, bottom = 7.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = OtoColors.TextTertiary,
             )
@@ -328,7 +370,7 @@ private fun ListenMeter(snapshot: NowPlayingSnapshot, countedMs: Long) {
                 Box(Modifier.weight(1f))
                 Text(
                     clock(duration),
-                    modifier = Modifier.padding(bottom = 10.dp),
+                    modifier = Modifier.padding(bottom = 7.dp),
                     style = OtoNumbers.Small,
                     color = OtoColors.TextTertiary,
                 )
@@ -352,16 +394,6 @@ private fun ListenMeter(snapshot: NowPlayingSnapshot, countedMs: Long) {
                         .background(OtoColors.TextPrimary),
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun Tile(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(modifier = modifier, shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.05f)) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Text(value, style = MaterialTheme.typography.headlineSmall, color = OtoColors.TextPrimary, maxLines = 1)
-            Text(label, modifier = Modifier.padding(top = 2.dp), style = MaterialTheme.typography.labelMedium, color = OtoColors.TextTertiary)
         }
     }
 }

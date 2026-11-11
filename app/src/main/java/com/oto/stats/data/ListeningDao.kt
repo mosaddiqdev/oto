@@ -158,7 +158,9 @@ abstract class ListeningDao {
                e.playedMs AS playedMs,
                e.completionPct AS completionPct,
                e.skipped AS skipped,
-               e.startedAt AS startedAt
+               e.startedAt AS startedAt,
+               t.identityKey AS identityKey,
+               e.sessionId AS sessionId
         FROM listening_events e
         JOIN tracks t ON t.id = e.trackId
         ORDER BY e.startedAt DESC
@@ -166,6 +168,19 @@ abstract class ListeningDao {
         """,
     )
     abstract fun recentEvents(limit: Int): Flow<List<EventRow>>
+
+    @Query(
+        """
+        SELECT ((startedAt + :tzOffsetMs) / 86400000) AS day,
+               COALESCE(SUM(playedMs), 0) AS playedMs,
+               COUNT(*) AS plays
+        FROM listening_events
+        WHERE startedAt >= :sinceMs
+        GROUP BY day
+        ORDER BY day
+        """,
+    )
+    abstract fun dailyTotals(sinceMs: Long, tzOffsetMs: Long): Flow<List<DayTotal>>
 
     @Query(
         """

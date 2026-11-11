@@ -56,4 +56,6 @@ data class NowPlayingSnapshot(
     val countable: Boolean,
     /** SystemClock.elapsedRealtime() when this was published; lets the UI keep counting between updates. */
     val atElapsedMs: Long = 0L,
+    /** The open listen this belongs to, so the UI can tell it apart from finished ones. */
+    val sessionId: String? = null,
 )
