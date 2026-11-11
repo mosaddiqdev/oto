@@ -132,6 +132,17 @@ fun NowScreen(
 
         item { Box(Modifier.padding(horizontal = 24.dp)) { WeekCard(week, today) } }
 
+        if (recent.isEmpty() && snapshot == null) {
+            item {
+                Text(
+                    "Your listens will show up here, with their covers.",
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OtoColors.TextTertiary,
+                )
+            }
+        }
+
         if (recent.isNotEmpty()) {
             item {
                 Column(Modifier.padding(horizontal = 24.dp)) {
@@ -156,13 +167,19 @@ private fun RecentRow(row: EventRow, container: AppContainer, nowMs: Long) {
         TrackCover(row.identityKey, row.title, container.artStore, 48.dp)
         Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
             Text(row.title, style = MaterialTheme.typography.titleSmall, color = OtoColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                if (row.skipped) row.artist + " · skipped" else row.artist,
-                style = MaterialTheme.typography.bodySmall,
-                color = OtoColors.TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row {
+                Text(
+                    row.artist,
+                    modifier = Modifier.weight(1f, fill = false),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OtoColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (row.skipped) {
+                    Text(" · skipped", style = MaterialTheme.typography.bodySmall, color = OtoColors.TextTertiary, maxLines = 1)
+                }
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(clock(row.playedMs), style = OtoNumbers.Body, color = OtoColors.TextPrimary)
