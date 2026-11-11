@@ -191,4 +191,17 @@ abstract class ListeningDao {
         """,
     )
     abstract fun totals(): Flow<Totals>
+
+    // Demo history is tagged by its session id prefix, so it can be removed cleanly.
+    @Query("DELETE FROM listening_events WHERE sessionId LIKE 'demo:%'")
+    abstract suspend fun deleteDemoEvents(): Int
+
+    @Query("DELETE FROM tracks WHERE id NOT IN (SELECT trackId FROM listening_events)")
+    abstract suspend fun deleteTracksWithoutEvents()
+
+    @Query("DELETE FROM artists WHERE id NOT IN (SELECT artistId FROM track_artists)")
+    abstract suspend fun deleteArtistsWithoutTracks()
+
+    @Query("SELECT COUNT(*) FROM listening_events WHERE sessionId LIKE 'demo:%'")
+    abstract fun demoEventCount(): Flow<Int>
 }

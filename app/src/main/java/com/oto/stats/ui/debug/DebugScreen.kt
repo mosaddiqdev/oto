@@ -28,6 +28,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -38,6 +40,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.oto.stats.AppContainer
+import com.oto.stats.data.DemoPreset
 import com.oto.stats.data.EventRow
 import com.oto.stats.data.Totals
 import com.oto.stats.diag.DiagLog
@@ -278,6 +281,41 @@ fun DebugScreen(
                     OutlinedButton(onClick = actions.copyLog, modifier = Modifier.weight(1f)) { Text("Copy log") }
                     OutlinedButton(onClick = { DiagLog.clear() }, modifier = Modifier.weight(1f)) { Text("Clear log") }
                 }
+            }
+        }
+
+        item {
+            val demoCount by remember(container) { container.repository.demoEventCount() }
+                .collectAsState(initial = 0)
+            var loading by remember { mutableStateOf(false) }
+            DebugCard {
+                Text("Demo history", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (demoCount > 0) "$demoCount demo listens loaded. Your real listens are not touched."
+                    else "Fills Oto with made-up listening so Stats can be tried without waiting. Easy to remove.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (preset in DemoPreset.values()) {
+                        OutlinedButton(
+                            enabled = !loading,
+                            onClick = {
+                                loading = true
+                                scope.launch {
+                                    try { container.repository.loadDemo(preset) } finally { loading = false }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp),
+                        ) { Text(preset.label, maxLines = 1) }
+                    }
+                }
+                OutlinedButton(
+                    enabled = !loading && demoCount > 0,
+                    onClick = { scope.launch { container.repository.clearDemo() } },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (loading) "Working…" else "Remove demo history") }
             }
         }
 

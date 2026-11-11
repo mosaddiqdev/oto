@@ -85,7 +85,7 @@ Queries (all `Flow`, all parameterised by range):
 - `activeDays(start, end)`: distinct local days, feeds streaks computed in Kotlin.
 - `firstEventAt()`: for the All label and the earliest navigable period.
 
-Indexes: add `listening_events(startedAt)` and `listening_events(trackId)` if missing. This is a schema change, so it needs migration 1 to 2 and a committed schema, per the existing guard.
+Indexes: `listening_events(startedAt)` and `(trackId)` already exist, so no schema change is needed for the planned queries.
 
 Counting rule: only completed-or-saved events count (as they are today). The currently open session is included, as it is already saved by checkpoint, so Stats and Now agree.
 
@@ -129,7 +129,7 @@ Decisions:
 Decided: we never wait for real data. Three layers:
 
 1. **Fake clock and fake events (unit tests, run in CI).** Every pure piece takes an injected `Clock` and `ZoneId`, so a test can say "today is 31 Dec, DST just ended, the user was in Tokyo yesterday" and get the same answer every run. Event lists are built by a small `EventFactory` helper (a year of listens in a few lines).
-2. **Seeded demo data (debug builds only).** A `DemoData` generator writes a believable history through the same `recordListen` path real tracking uses: N years back, realistic habits (commute and evening peaks, weekday vs weekend, a few heavy artists plus a long tail, skips, replays, a couple of apps, a quiet month, a travel period with a different time zone offset). It is deterministic (fixed seed) so screenshots and bugs are reproducible. Reachable from Setup: "Load demo history" with presets (empty, 1 week, 3 months, 3 years) and "Clear demo data". Demo rows are tagged so they can be removed without touching real listens, and the option does not exist in release builds.
+2. **Seeded demo data (a Developer card in Setup).** A `DemoData` generator writes a believable history through the same `recordListen` path real tracking uses: N years back, realistic habits (commute and evening peaks, weekday vs weekend, a few heavy artists plus a long tail, skips, replays, a couple of apps, a quiet month, a travel period with a different time zone offset). It is deterministic (fixed seed) so screenshots and bugs are reproducible. Reachable from Setup: "Load demo history" with presets (empty, 1 week, 3 months, 3 years) and "Clear demo data". Demo rows are tagged so they can be removed without touching real listens, and because the APK you install is the release build, it lives in Setup rather than being debug-only.
 3. **Real device.** Your own live data still covers the live-update path (new listen appears in Stats while playing). Importing history later (Last.fm or a file) gives a second source of real long history.
 
 The presets double as the empty-state and low-data test cases from section 4.
@@ -150,7 +150,7 @@ Genres, mood analysis, friends, challenges and gamification (Tempo has these; we
 
 0. `DemoData` generator and Setup toggle (debug only), so every later step can be seen with real-looking data.
 1. Pure logic with tests: `StatsPeriod`, streaks, deltas, data gate.
-2. Schema: indexes, migration 1 to 2, committed schema.
+2. (No schema change needed: the indexes already exist.)
 3. DAO queries and repository snapshot.
 4. ViewModel and state.
 5. Screen skeleton with real data and all empty states (basic layout only).

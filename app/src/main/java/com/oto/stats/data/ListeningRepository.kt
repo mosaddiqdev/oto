@@ -11,6 +11,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.room.withTransaction
+import java.time.ZoneId
 
 class ListeningRepository(
     private val db: OtoDatabase,
@@ -57,6 +59,26 @@ class ListeningRepository(
     fun totals(): Flow<Totals> = dao.totals()
 
     fun dailyTotals(sinceMs: Long, tzOffsetMs: Long): Flow<List<DayTotal>> = dao.dailyTotals(sinceMs, tzOffsetMs)
+
+    fun demoEventCount(): Flow<Int> = dao.demoEventCount()
+
+    /** Replaces any earlier demo history with a fresh generated one. Real listens are untouched. */
+    suspend fun loadDemo(preset: DemoPreset): Int = withContext(Dispatchers.IO) {
+        val listens = DemoHistory.generate(preset, System.currentTimeMillis(), ZoneId.systemDefault())
+        db.withTransaction {
+            removeDemoInternal()
+            for (l in listens) dao.recordListen(l.result, ArtistParser.parse(l.result.meta.artist), l.tzOffsetMinutes)
+        }
+        listens.size
+    }
+
+    suspend fun clearDemo() = withContext(Dispatchers.IO) { db.withTransaction { removeDemoInternal() } }
+
+    private suspend fun removeDemoInternal() {
+        dao.deleteDemoEvents()
+        dao.deleteTracksWithoutEvents()
+        dao.deleteArtistsWithoutTracks()
+    }
 
     suspend fun clearAll() = withContext(Dispatchers.IO) { db.clearAllTables() }
 
