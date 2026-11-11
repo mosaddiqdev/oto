@@ -40,7 +40,10 @@ fun WeekCard(days: List<DayTotal>, today: Long) {
     val peak = week.maxOf { it.playedMs }.coerceAtLeast(1L)
 
     OtoCard {
-        Text("TODAY", style = MaterialTheme.typography.labelMedium, color = OtoColors.TextTertiary)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("TODAY", style = MaterialTheme.typography.labelMedium, color = OtoColors.TextTertiary)
+            Text("LAST 7 DAYS", style = MaterialTheme.typography.labelMedium, color = OtoColors.TextTertiary)
+        }
         Text(
             if (todayTotal.playedMs > 0) hoursMinutes(todayTotal.playedMs) else "0m",
             modifier = Modifier.padding(top = 6.dp),

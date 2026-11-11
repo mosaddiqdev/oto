@@ -2,6 +2,9 @@ package com.oto.stats.ui.now
 
 import android.os.Build
 import android.os.SystemClock
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -37,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -92,6 +96,13 @@ fun NowScreen(
     }.collectAsState(initial = emptyList())
     val finished by remember(container) { container.repository.recentEvents(8) }
         .collectAsState(initial = emptyList())
+    // Re-read the clock so "5m ago" keeps ageing while the screen stays open.
+    val clockNow by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(30_000)
+            value = System.currentTimeMillis()
+        }
+    }
     // The listen in progress is saved too, but it belongs in the hero, not in the history.
     val recent = finished.filter { it.sessionId != snapshot?.sessionId }.take(6)
 
@@ -128,7 +139,7 @@ fun NowScreen(
                     Column(Modifier.padding(top = 8.dp)) {
                         recent.forEachIndexed { i, row ->
                             if (i > 0) HorizontalDivider(color = OtoColors.Hairline, modifier = Modifier.padding(start = 64.dp))
-                            RecentRow(row, container)
+                            RecentRow(row, container, clockNow)
                         }
                     }
                 }
@@ -140,7 +151,7 @@ fun NowScreen(
 private const val DAY_MS = 86_400_000L
 
 @Composable
-private fun RecentRow(row: EventRow, container: AppContainer) {
+private fun RecentRow(row: EventRow, container: AppContainer, nowMs: Long) {
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         TrackCover(row.identityKey, row.title, container.artStore, 48.dp)
         Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
@@ -155,7 +166,7 @@ private fun RecentRow(row: EventRow, container: AppContainer) {
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(clock(row.playedMs), style = OtoNumbers.Body, color = OtoColors.TextPrimary)
-            Text(timeAgo(row.startedAt + row.playedMs), style = MaterialTheme.typography.labelSmall, color = OtoColors.TextTertiary)
+            Text(timeAgo(row.startedAt + row.playedMs, nowMs), style = MaterialTheme.typography.labelSmall, color = OtoColors.TextTertiary)
         }
     }
 }
@@ -170,18 +181,24 @@ private fun Hero(
     art: androidx.compose.ui.graphics.ImageBitmap?,
 ) {
     val playing = snapshot?.state == PlayState.PLAYING
+    // With nothing playing the hero shrinks, so today's numbers are visible without scrolling.
+    val ratio by animateFloatAsState(if (snapshot == null) 1.5f else 0.92f, tween(450), label = "hero")
     Box(
         Modifier
             .fillMaxWidth()
-            .aspectRatio(0.92f),
+            .aspectRatio(ratio),
     ) {
         if (art != null) {
-            Image(
-                bitmap = art,
-                contentDescription = "Cover of ${snapshot?.meta?.title.orEmpty()}",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+            Crossfade(targetState = art, animationSpec = tween(450), label = "cover") { cover ->
+                if (cover != null) {
+                    Image(
+                        bitmap = cover,
+                        contentDescription = "Cover of ${snapshot?.meta?.title.orEmpty()}",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
         } else {
             Box(
                 Modifier

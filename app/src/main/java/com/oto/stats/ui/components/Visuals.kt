@@ -16,12 +16,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 
-/** Three bars that dance while music plays and rest low when it is paused. */
+/**
+ * Three bars that dance while music plays. When paused they rest low and nothing animates, so a
+ * paused player costs no battery.
+ */
 @Composable
 fun Equalizer(active: Boolean, color: Color, modifier: Modifier = Modifier.size(14.dp)) {
+    if (!active) {
+        Canvas(modifier) { drawBars(color, listOf(0.3f, 0.3f, 0.3f)) }
+        return
+    }
     val transition = rememberInfiniteTransition(label = "equalizer")
     val a by transition.animateFloat(
         0.25f, 1f, infiniteRepeatable(tween(520, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "a",
@@ -32,18 +40,19 @@ fun Equalizer(active: Boolean, color: Color, modifier: Modifier = Modifier.size(
     val c by transition.animateFloat(
         0.2f, 0.95f, infiniteRepeatable(tween(610, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "c",
     )
-    Canvas(modifier) {
-        val fractions = if (active) listOf(a, b, c) else listOf(0.3f, 0.3f, 0.3f)
-        val barWidth = size.width / 5f
-        fractions.forEachIndexed { i, f ->
-            val h = size.height * f
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(i * barWidth * 2f, size.height - h),
-                size = Size(barWidth, h),
-                cornerRadius = CornerRadius(barWidth / 2f),
-            )
-        }
+    Canvas(modifier) { drawBars(color, listOf(a, b, c)) }
+}
+
+private fun DrawScope.drawBars(color: Color, fractions: List<Float>) {
+    val barWidth = size.width / 5f
+    fractions.forEachIndexed { i, f ->
+        val h = size.height * f
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(i * barWidth * 2f, size.height - h),
+            size = Size(barWidth, h),
+            cornerRadius = CornerRadius(barWidth / 2f),
+        )
     }
 }
 
