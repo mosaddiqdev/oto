@@ -2,6 +2,27 @@ package com.oto.stats.ui.shell
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.abs
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -138,9 +159,32 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
     val snapshot by TrackingStatus.nowPlaying.collectAsState()
     val needsAttention = !state.accessGranted || !state.notificationsGranted || !state.batteryExempt
 
+    // Scrolling down shrinks the bottom bars to give the content room; scrolling up (or being at
+    // the top of the page) brings them back.
+    var minimized by remember { mutableStateOf(false) }
+    LaunchedEffect(tab) { minimized = false }
+    val chromeProgress = animateFloatAsState(
+        targetValue = if (minimized) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        label = "chrome",
+    )
+    val chrome: () -> Float = { chromeProgress.value }
+    val scrollWatcher = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                when {
+                    headerProgress.floatValue < 0.02f -> minimized = false
+                    available.y < -6f -> minimized = true
+                    available.y > 6f -> minimized = false
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
     Box(Modifier.fillMaxSize().background(OtoColors.Canvas)) {
         // Everything inside this box is what the glass pieces bend and blur.
-        Box(Modifier.fillMaxSize().extendUp(OVERSCAN_DP.dp).layerBackdrop(backdrop).background(OtoColors.Canvas)) {
+        Box(Modifier.fillMaxSize().nestedScroll(scrollWatcher).extendUp(OVERSCAN_DP.dp).layerBackdrop(backdrop).background(OtoColors.Canvas)) {
             when (tab) {
                 Tab.Now -> NowScreen(container = container, state = state, headerProgress = headerProgress, onGrantAccess = actions.openAccessSettings)
                 Tab.Stats -> ComingSoon(headerProgress, "Your top artists, tracks and listening hours over any period.")
@@ -165,10 +209,10 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
                 .padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
         ) {
             if (tab != Tab.Now && snapshot != null) {
-                MiniPlayer(backdrop = backdrop, onClick = { tabName = Tab.Now.name })
+                MiniPlayer(backdrop = backdrop, chrome = chrome, onClick = { tabName = Tab.Now.name })
                 Spacer(Modifier.height(10.dp))
             }
-            GlassTabBar(selected = tab, onSelect = { tabName = it.name }, backdrop = backdrop)
+            GlassTabBar(selected = tab, onSelect = { tabName = it.name }, backdrop = backdrop, chrome = chrome)
         }
     }
 }
@@ -240,10 +284,13 @@ private fun GlassHeader(
                 style = MaterialTheme.typography.headlineLarge,
                 color = OtoColors.TextPrimary,
             )
+            val setupSource = remember { MutableInteractionSource() }
+            val setupPress = rememberPress(setupSource)
             Surface(
                 onClick = onSetup,
+                interactionSource = setupSource,
                 modifier = Modifier.graphicsLayer {
-                    val scale = lerp(1f, 0.92f, progress())
+                    val scale = lerp(1f, 0.92f, progress()) * (1f - 0.04f * setupPress.value)
                     scaleX = scale
                     scaleY = scale
                     transformOrigin = TransformOrigin(1f, 0.5f)
@@ -270,42 +317,72 @@ private fun Modifier.extendUp(by: Dp): Modifier = layout { measurable, constrain
     layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(0, -extra) }
 }
 
+/** 0..1: how pressed [source] is, on a springy curve so release overshoots a touch. */
+@Composable
+private fun rememberPress(source: InteractionSource): State<Float> {
+    val pressed by source.collectIsPressedAsState()
+    return animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+        label = "press",
+    )
+}
+
+/** Glass shrinks a little under the finger and springs back. */
+private fun Modifier.pressScale(press: State<Float>, amount: Float = 0.04f): Modifier = graphicsLayer {
+    val s = 1f - amount * press.value
+    scaleX = s
+    scaleY = s
+}
+
+/** Height that eases from [expanded] to [minimized] as [chrome] goes 0..1 (read at layout time). */
+private fun Modifier.chromeHeight(expanded: Dp, minimized: Dp, chrome: () -> Float): Modifier =
+    layout { measurable, constraints ->
+        val h = lerp(expanded.toPx(), minimized.toPx(), chrome()).roundToInt()
+        val placeable = measurable.measure(constraints.copy(minHeight = h, maxHeight = h))
+        layout(placeable.width, h) { placeable.place(0, 0) }
+    }
+
 /** What is playing, as a glass pill above the tab bar, on every tab except Now. Tap to go to Now. */
 @Composable
-private fun MiniPlayer(backdrop: Backdrop, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun MiniPlayer(backdrop: Backdrop, chrome: () -> Float, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val snapshot by TrackingStatus.nowPlaying.collectAsState()
     val art by TrackingStatus.artwork.collectAsState()
     val current = snapshot ?: return
     val bitmap = remember(art) { art?.asImageBitmap() }
     val playing = current.state == PlayState.PLAYING
     val shape = RoundedCornerShape(32.dp)
+    val source = remember { MutableInteractionSource() }
+    val press = rememberPress(source)
     Row(
         modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .pressScale(press)
+            .chromeHeight(64.dp, 52.dp, chrome)
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { shape },
                 effects = {
                     colorControls(brightness = -0.03f, saturation = 1.6f)
                     blur(5.dp.toPx())
-                    lens(22.dp.toPx(), 36.dp.toPx(), depthEffect = true, chromaticAberration = true)
+                    val bulge = 1f + 0.35f * press.value
+                    lens(22.dp.toPx() * bulge, 36.dp.toPx() * bulge, depthEffect = true, chromaticAberration = true)
                 },
                 highlight = { GlassHighlight },
                 shadow = { GlassShadow },
                 onDrawBackdrop = PageFill,
                 onDrawSurface = { drawRect(GlassTint) },
             )
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(interactionSource = source, indication = null, onClick = onClick)
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(OtoColors.Surface2),
+            Modifier.size(40.dp).clip(RoundedCornerShape(13.dp)).background(OtoColors.Surface2),
             contentAlignment = Alignment.Center,
         ) {
             if (bitmap != null) {
-                Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp))
+                Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(40.dp))
             } else {
                 Text(
                     current.meta.title.firstOrNull { it.isLetterOrDigit() }?.uppercase().orEmpty(),
@@ -327,18 +404,87 @@ private fun MiniPlayer(backdrop: Backdrop, onClick: () -> Unit, modifier: Modifi
 }
 
 /**
- * Floating capsule. Real Liquid Glass (refraction + blur + specular edge) on Android 13+,
- * blur-only on 12, and a plain translucent bar below that. The effects are drawn by the Backdrop
- * library, which skips whatever the phone cannot do.
+ * Floating capsule of Liquid Glass. The selected tab sits in a pill that behaves like a physical
+ * object: a tap lifts it past the bar's edges, turns it into a clear lens while it springs to the
+ * new tab, and settles it back into a flat fill. Dragging across the bar carries it by hand, with
+ * a tick at each tab. Scrolling down shrinks the whole bar ([chrome] 0..1) and hides the labels.
  */
 @Composable
-private fun GlassTabBar(selected: Tab, onSelect: (Tab) -> Unit, backdrop: Backdrop, modifier: Modifier = Modifier) {
+private fun GlassTabBar(
+    selected: Tab,
+    onSelect: (Tab) -> Unit,
+    backdrop: Backdrop,
+    chrome: () -> Float,
+    modifier: Modifier = Modifier,
+) {
     val shape = RoundedCornerShape(36.dp)
     val pad = 6.dp
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val count = Tab.entries.size
+
+    val position = remember { Animatable(selected.ordinal.toFloat()) } // fractional tab index
+    val lift = remember { Animatable(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    var lastTick by remember { mutableIntStateOf(selected.ordinal) }
+    var widthPx by remember { mutableIntStateOf(0) }
+    val travel = spring<Float>(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow)
+    val liftSpring = spring<Float>(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)
+    val settleSpring = spring<Float>(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium)
+
+    LaunchedEffect(selected) {
+        if (dragging) return@LaunchedEffect
+        val target = selected.ordinal.toFloat()
+        if (abs(position.value - target) < 0.001f && lift.value == 0f) return@LaunchedEffect
+        launch { lift.animateTo(1f, liftSpring) }
+        position.animateTo(target, travel)
+        lift.animateTo(0f, settleSpring)
+    }
+
+    val glassPill by remember { derivedStateOf { lift.value > 0.02f } }
+    val press = remember { mutableFloatStateOf(0f) }
+
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
-            .height(68.dp)
+            .onSizeChanged { widthPx = it.width }
+            .chromeHeight(68.dp, 54.dp, chrome)
+            .pointerInput(widthPx) {
+                val tabPx = ((widthPx - 2 * pad.toPx()) / count).coerceAtLeast(1f)
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        dragging = true
+                        lastTick = position.value.roundToInt()
+                        scope.launch { lift.animateTo(1f, liftSpring) }
+                    },
+                    onHorizontalDrag = { change, amount ->
+                        change.consume()
+                        val next = (position.value + amount / tabPx).coerceIn(0f, (count - 1).toFloat())
+                        scope.launch { position.snapTo(next) }
+                        val index = next.roundToInt()
+                        if (index != lastTick) {
+                            lastTick = index
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                    },
+                    onDragEnd = {
+                        dragging = false
+                        val target = position.value.roundToInt().coerceIn(0, count - 1)
+                        onSelect(Tab.entries[target])
+                        scope.launch {
+                            position.animateTo(target.toFloat(), travel)
+                            lift.animateTo(0f, settleSpring)
+                        }
+                    },
+                    onDragCancel = {
+                        dragging = false
+                        scope.launch {
+                            position.animateTo(selected.ordinal.toFloat(), travel)
+                            lift.animateTo(0f, settleSpring)
+                        }
+                    },
+                )
+            }
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { shape },
@@ -353,21 +499,52 @@ private fun GlassTabBar(selected: Tab, onSelect: (Tab) -> Unit, backdrop: Backdr
                 onDrawSurface = { drawRect(GlassTint) },
             ),
     ) {
-        val tabWidth = (maxWidth - pad * 2) / Tab.entries.size
-        val x by animateDpAsState(
-            targetValue = tabWidth * selected.ordinal,
-            animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium),
-            label = "indicator",
-        )
-        // The sliding pill under the selected tab.
+        val tabWidth = (maxWidth - pad * 2) / count
+        val pillHeight = maxHeight - pad * 2
+        val growPx = with(LocalDensity.current) { 9.dp.toPx() }
+        val pillOffset: Density.() -> IntOffset = {
+            IntOffset((pad.toPx() + position.value * tabWidth.toPx()).roundToInt(), pad.roundToPx())
+        }
+
+        // Resting pill: a flat translucent fill that fades out while the glass one is lifted.
         Box(
             Modifier
-                .offset(x = pad + x, y = pad)
-                .width(tabWidth)
-                .height(68.dp - pad * 2)
+                .offset(pillOffset)
+                .size(tabWidth, pillHeight)
+                .graphicsLayer { alpha = 1f - lift.value.coerceIn(0f, 1f) }
                 .background(Color.White.copy(alpha = 0.10f), RoundedCornerShape(30.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(30.dp)),
         )
+        // Lifted pill: a lens of the same glass, taller than the bar while it travels.
+        if (glassPill) {
+            val pillShape = RoundedCornerShape(30.dp)
+            Box(
+                Modifier
+                    .offset(pillOffset)
+                    .size(tabWidth, pillHeight)
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { pillShape },
+                        effects = {
+                            val l = lift.value.coerceIn(0f, 1f)
+                            colorControls(brightness = -0.03f, saturation = 1f + 0.6f * l)
+                            blur(5.dp.toPx() * l)
+                            lens(12.dp.toPx() * l, 16.dp.toPx() * l, depthEffect = true, chromaticAberration = true)
+                        },
+                        highlight = { GlassHighlight.copy(alpha = GlassHighlight.alpha * lift.value.coerceIn(0f, 1f)) },
+                        shadow = { Shadow(radius = 12.dp, offset = DpOffset(0.dp, 2.dp), color = Color.Black.copy(alpha = 0.30f), alpha = lift.value.coerceIn(0f, 1f)) },
+                        layerBlock = {
+                            val l = lift.value.coerceIn(0f, 1.2f)
+                            scaleX = 1f + 0.06f * l
+                            scaleY = 1f + growPx * l / size.height
+                            alpha = lift.value.coerceIn(0f, 1f)
+                        },
+                        onDrawBackdrop = PageFill,
+                        onDrawSurface = { drawRect(GlassTint.copy(alpha = 0.30f)) },
+                    ),
+            )
+        }
+
         Row(Modifier.fillMaxSize().padding(horizontal = pad)) {
             Tab.entries.forEach { tab ->
                 val active = tab == selected
@@ -381,14 +558,27 @@ private fun GlassTabBar(selected: Tab, onSelect: (Tab) -> Unit, backdrop: Backdr
                             role = Role.Tab,
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = { onSelect(tab) },
+                            onClick = {
+                                if (!active) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSelect(tab)
+                            },
                         ),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     NavGlyph(tab.icon, tint, Modifier.size(24.dp))
-                    Box(Modifier.size(3.dp))
-                    Text(tab.label, style = MaterialTheme.typography.labelSmall, color = tint)
+                    // The label folds away when the bar shrinks, and the icon settles to the middle.
+                    Box(
+                        Modifier
+                            .layout { measurable, constraints ->
+                                val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+                                val h = (placeable.height * (1f - chrome())).roundToInt() + (3.dp.toPx() * (1f - chrome())).roundToInt()
+                                layout(placeable.width, h) { placeable.place(0, (3.dp.toPx() * (1f - chrome())).roundToInt()) }
+                            }
+                            .graphicsLayer { alpha = (1f - chrome() * 1.6f).coerceIn(0f, 1f) },
+                    ) {
+                        Text(tab.label, style = MaterialTheme.typography.labelSmall, color = tint)
+                    }
                 }
             }
         }
