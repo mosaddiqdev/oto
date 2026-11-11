@@ -15,6 +15,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,34 +32,43 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.oto.stats.ui.theme.OtoColors
 
-/** A tab screen: big title, optional action on the right, then scrolling content. */
+/** Height of the floating header's content row, below the status bar. */
+const val HEADER_CONTENT_DP = 64
+
+/**
+ * Reports how far a list has scrolled as 0..1 so the glass header can morph in.
+ * [fadeDp] is the scroll distance over which it goes from clear to full glass.
+ */
+@Composable
+fun TrackHeaderProgress(state: LazyListState, target: MutableFloatState, fadeDp: Dp) {
+    val fadePx = with(LocalDensity.current) { fadeDp.toPx() }
+    LaunchedEffect(state, fadePx) {
+        snapshotFlow {
+            if (state.firstVisibleItemIndex > 0) 1f
+            else (state.firstVisibleItemScrollOffset / fadePx).coerceIn(0f, 1f)
+        }.collect { target.floatValue = it }
+    }
+}
+
+/** A tab screen under the floating header, with room at the bottom for the glass bars. */
 @Composable
 fun ScreenColumn(
-    title: String,
+    headerProgress: MutableFloatState,
     modifier: Modifier = Modifier,
-    action: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
-    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + HEADER_CONTENT_DP.dp
+    val state = rememberLazyListState()
+    TrackHeaderProgress(state, headerProgress, fadeDp = 32.dp)
     LazyColumn(
+        state = state,
         modifier = modifier
             .fillMaxSize()
             .background(OtoColors.Canvas),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 16.dp, bottom = 130.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 8.dp, bottom = 210.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(title, style = MaterialTheme.typography.headlineLarge, color = OtoColors.TextPrimary)
-                action?.invoke()
-            }
-        }
-        content()
-    }
+        content = content,
+    )
 }
 
 /** The one container style: a slightly raised surface with a hairline edge. */
@@ -79,8 +95,8 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ComingSoon(title: String, line: String) {
-    ScreenColumn(title) {
+fun ComingSoon(headerProgress: MutableFloatState, line: String) {
+    ScreenColumn(headerProgress) {
         item {
             OtoCard {
                 Text("Coming soon", style = MaterialTheme.typography.titleMedium, color = OtoColors.Accent)

@@ -26,7 +26,27 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.util.lerp
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.Shadow
+import com.oto.stats.tracking.TrackingStatus
+import com.oto.stats.tracking.engine.PlayState
+import com.oto.stats.ui.components.Equalizer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,24 +107,158 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
     }
 
     val backdrop = rememberLayerBackdrop()
+    val headerProgress = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(tab) { headerProgress.floatValue = 0f }
+    val snapshot by TrackingStatus.nowPlaying.collectAsState()
+    val needsAttention = !state.accessGranted || !state.notificationsGranted || !state.batteryExempt
+
     Box(Modifier.fillMaxSize().background(OtoColors.Canvas)) {
-        // Everything inside this box is what the glass bar bends and blurs.
+        // Everything inside this box is what the glass pieces bend and blur.
         Box(Modifier.fillMaxSize().layerBackdrop(backdrop).background(OtoColors.Canvas)) {
             when (tab) {
-                Tab.Now -> NowScreen(container = container, state = state, onOpenSetup = { showSetup = true }, onGrantAccess = actions.openAccessSettings)
-                Tab.Stats -> ComingSoon("Stats", "Your top artists, tracks and listening hours over any period.")
-                Tab.History -> ComingSoon("History", "Every listen, grouped by day, searchable.")
-                Tab.Library -> ComingSoon("Library", "Artists, albums and tracks you have played, with their numbers.")
+                Tab.Now -> NowScreen(container = container, state = state, headerProgress = headerProgress, onGrantAccess = actions.openAccessSettings)
+                Tab.Stats -> ComingSoon(headerProgress, "Your top artists, tracks and listening hours over any period.")
+                Tab.History -> ComingSoon(headerProgress, "Every listen, grouped by day, searchable.")
+                Tab.Library -> ComingSoon(headerProgress, "Artists, albums and tracks you have played, with their numbers.")
             }
         }
-        GlassTabBar(
-            selected = tab,
-            onSelect = { tabName = it.name },
+
+        GlassHeader(
+            title = tab.label,
+            progress = { headerProgress.floatValue },
+            needsAttention = needsAttention,
+            onSetup = { showSetup = true },
             backdrop = backdrop,
-            modifier = Modifier
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+
+        Column(
+            Modifier
                 .align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
+        ) {
+            if (tab != Tab.Now && snapshot != null) {
+                MiniPlayer(backdrop = backdrop, onClick = { tabName = Tab.Now.name })
+                Spacer(Modifier.height(10.dp))
+            }
+            GlassTabBar(selected = tab, onSelect = { tabName = it.name }, backdrop = backdrop)
+        }
+    }
+}
+
+/**
+ * The top bar. At rest it is just a title over the content. As the page scrolls it turns into a
+ * pane of Liquid Glass: the bottom corners round off and the content passing under it is bent
+ * and blurred at the edge. [progress] is 0 (clear) to 1 (full glass).
+ */
+@Composable
+private fun GlassHeader(
+    title: String,
+    progress: () -> Float,
+    needsAttention: Boolean,
+    onSetup: () -> Unit,
+    backdrop: Backdrop,
+    modifier: Modifier = Modifier,
+) {
+    val glassOn by remember { derivedStateOf { progress() > 0.02f } }
+    Box(
+        modifier
+            .fillMaxWidth()
+            .then(
+                if (glassOn) {
+                    Modifier.drawBackdrop(
+                        backdrop = backdrop,
+                        shape = {
+                            val r = lerp(0f, 36f, progress()).dp
+                            RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomEnd = r, bottomStart = r)
+                        },
+                        effects = {
+                            val p = progress()
+                            blur(12.dp.toPx() * p)
+                            lens(22.dp.toPx() * p, 28.dp.toPx() * p)
+                        },
+                        highlight = { Highlight.Default.copy(alpha = progress()) },
+                        shadow = { Shadow(alpha = progress()) },
+                        onDrawSurface = { drawRect(OtoColors.Canvas.copy(alpha = 0.40f * progress())) },
+                    )
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .height(64.dp)
+                .padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(title, style = MaterialTheme.typography.headlineLarge, color = OtoColors.TextPrimary)
+            Surface(onClick = onSetup, shape = CircleShape, color = Color.Black.copy(alpha = 0.38f)) {
+                Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (needsAttention) {
+                        Box(Modifier.size(7.dp).background(OtoColors.Warning, CircleShape))
+                        Box(Modifier.size(6.dp))
+                    }
+                    Text("Setup", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+/** What is playing, as a glass pill above the tab bar, on every tab except Now. Tap to go to Now. */
+@Composable
+private fun MiniPlayer(backdrop: Backdrop, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val snapshot by TrackingStatus.nowPlaying.collectAsState()
+    val art by TrackingStatus.artwork.collectAsState()
+    val current = snapshot ?: return
+    val bitmap = remember(art) { art?.asImageBitmap() }
+    val playing = current.state == PlayState.PLAYING
+    val shape = RoundedCornerShape(32.dp)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    vibrancy()
+                    blur(10.dp.toPx())
+                    lens(16.dp.toPx(), 20.dp.toPx())
+                },
+                onDrawSurface = { drawRect(OtoColors.Canvas.copy(alpha = 0.42f)) },
+            )
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(OtoColors.Surface2),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (bitmap != null) {
+                Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp))
+            } else {
+                Text(
+                    current.meta.title.firstOrNull { it.isLetterOrDigit() }?.uppercase().orEmpty(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = OtoColors.TextTertiary,
+                )
+            }
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text(current.meta.title, style = MaterialTheme.typography.titleSmall, color = OtoColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(current.meta.artist, style = MaterialTheme.typography.bodySmall, color = OtoColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Equalizer(
+            active = playing,
+            color = if (playing) OtoColors.Accent else OtoColors.TextTertiary,
+            modifier = Modifier.padding(end = 10.dp).size(width = 16.dp, height = 14.dp),
         )
     }
 }

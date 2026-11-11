@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.MutableFloatState
+import com.oto.stats.ui.components.TrackHeaderProgress
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -74,7 +77,7 @@ import kotlinx.coroutines.delay
 fun NowScreen(
     container: AppContainer,
     state: DebugState,
-    onOpenSetup: () -> Unit,
+    headerProgress: MutableFloatState,
     onGrantAccess: () -> Unit,
 ) {
     val snapshot by TrackingStatus.nowPlaying.collectAsState()
@@ -92,7 +95,11 @@ fun NowScreen(
     // The listen in progress is saved too, but it belongs in the hero, not in the history.
     val recent = finished.filter { it.sessionId != snapshot?.sessionId }.take(6)
 
+    val listState = rememberLazyListState()
+    TrackHeaderProgress(listState, headerProgress, fadeDp = 160.dp)
+
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 130.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -101,8 +108,6 @@ fun NowScreen(
             Hero(
                 snapshot = snapshot,
                 art = artBitmap,
-                needsAttention = !state.accessGranted || !state.notificationsGranted || !state.batteryExempt,
-                onOpenSetup = onOpenSetup,
             )
         }
 
@@ -163,10 +168,7 @@ private fun RecentRow(row: EventRow, container: AppContainer) {
 private fun Hero(
     snapshot: NowPlayingSnapshot?,
     art: androidx.compose.ui.graphics.ImageBitmap?,
-    needsAttention: Boolean,
-    onOpenSetup: () -> Unit,
 ) {
-    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val playing = snapshot?.state == PlayState.PLAYING
     Box(
         Modifier
@@ -222,35 +224,6 @@ private fun Hero(
                 ),
         )
 
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = top + 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            if (snapshot != null) {
-                GlassPill {
-                    Equalizer(active = playing, color = if (playing) OtoColors.Accent else Color.White.copy(alpha = 0.7f), modifier = Modifier.size(width = 14.dp, height = 12.dp))
-                    Text(
-                        (if (playing) "Playing" else "Paused") + " · " + MusicApps.labelFor(snapshot.packageName),
-                        modifier = Modifier.padding(start = 8.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White,
-                    )
-                }
-            } else {
-                Text("Now", style = MaterialTheme.typography.titleLarge, color = OtoColors.TextPrimary)
-            }
-            GlassPill(onClick = onOpenSetup) {
-                if (needsAttention) {
-                    Box(Modifier.size(7.dp).background(OtoColors.Warning, CircleShape))
-                    Box(Modifier.size(6.dp))
-                }
-                Text("Setup", style = MaterialTheme.typography.labelMedium, color = Color.White)
-            }
-        }
-
         Column(
             Modifier
                 .align(Alignment.BottomStart)
@@ -265,6 +238,15 @@ private fun Hero(
                     color = OtoColors.TextSecondary,
                 )
             } else {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 10.dp)) {
+                    Equalizer(active = playing, color = if (playing) OtoColors.Accent else OtoColors.TextTertiary, modifier = Modifier.size(width = 14.dp, height = 12.dp))
+                    Text(
+                        (if (playing) "Playing" else "Paused") + " · " + MusicApps.labelFor(snapshot.packageName),
+                        modifier = Modifier.padding(start = 8.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = OtoColors.TextSecondary,
+                    )
+                }
                 Text(
                     snapshot.meta.title,
                     style = MaterialTheme.typography.headlineLarge,
@@ -284,22 +266,6 @@ private fun Hero(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun GlassPill(onClick: (() -> Unit)? = null, content: @Composable RowScope.() -> Unit) {
-    val inner: @Composable () -> Unit = {
-        Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            content = content,
-        )
-    }
-    if (onClick != null) {
-        Surface(onClick = onClick, shape = CircleShape, color = Color.Black.copy(alpha = 0.38f), content = inner)
-    } else {
-        Surface(shape = CircleShape, color = Color.Black.copy(alpha = 0.38f), content = inner)
     }
 }
 
