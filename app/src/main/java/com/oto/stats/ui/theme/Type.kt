@@ -76,4 +76,5 @@ object OtoNumbers {
     val Body = body(14, 20, 500).copy(fontFeatureSettings = TABULAR)
     val Small = body(12, 16, 500).copy(fontFeatureSettings = TABULAR)
     val Title = body(20, 26, 600).copy(fontFeatureSettings = TABULAR)
+    val Hero = body(56, 60, 600, -1.0).copy(fontFeatureSettings = TABULAR)
 }

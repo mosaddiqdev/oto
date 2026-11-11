@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
@@ -217,6 +218,7 @@ class OtoListenerService : NotificationListenerService() {
         scope = null
         TrackingStatus.listenerConnected.value = false
         TrackingStatus.nowPlaying.value = null
+        TrackingStatus.artwork.value = null
     }
 
     private fun resync() {
@@ -285,7 +287,11 @@ class OtoListenerService : NotificationListenerService() {
         val snapshots = tracked.values.mapNotNull { it.tracker.snapshot() }
         val current = snapshots.firstOrNull { it.state == PlayState.PLAYING }
             ?: snapshots.firstOrNull { it.state == PlayState.PAUSED }
-        TrackingStatus.nowPlaying.value = current
+        // Stamped so the screen can keep the counter moving between the 4 second ticks.
+        TrackingStatus.nowPlaying.value = current?.copy(atElapsedMs = SystemClock.elapsedRealtime())
+        TrackingStatus.artwork.value = current?.let { c ->
+            tracked.values.firstOrNull { it.tracker.snapshot()?.packageName == c.packageName }?.art
+        }
         updateNotificationText(current)
     }
 
@@ -343,6 +349,10 @@ class OtoListenerService : NotificationListenerService() {
         private var lastLoggedState: PlayState? = null
         private var lastLoggedTrack: String? = null
 
+        /** Cover art the player attached to the current track, if any. */
+        var art: Bitmap? = null
+            private set
+
         val tracker = PlaybackTracker(
             controller.packageName,
             onDiscarded = { DiagLog.log("play", it) },
@@ -389,6 +399,7 @@ class OtoListenerService : NotificationListenerService() {
 
         private fun handleMetadata(metadata: MediaMetadata?) {
             val meta = metadata?.toTrackMeta()
+            art = metadata?.artwork()
             if (meta != null) {
                 val key = "${meta.title}|${meta.artist}"
                 if (key != lastLoggedTrack) {
@@ -456,6 +467,25 @@ private fun positionOf(state: PlaybackState, now: Clock): Long {
     if (state.state != PlaybackState.STATE_PLAYING) return state.position
     val sinceUpdate = (SystemClock.elapsedRealtime() - state.lastPositionUpdateTime).coerceAtLeast(0)
     return state.position + (sinceUpdate * state.playbackSpeed).toLong()
+}
+
+/** The cover as a bitmap, shrunk so a few of them never weigh much memory. */
+private fun MediaMetadata.artwork(): Bitmap? {
+    val raw = getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+        ?: getBitmap(MediaMetadata.METADATA_KEY_ART)
+        ?: getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+        ?: return null
+    val longest = maxOf(raw.width, raw.height)
+    if (longest <= 720) return raw
+    val scale = 720f / longest
+    return runCatching {
+        Bitmap.createScaledBitmap(
+            raw,
+            (raw.width * scale).toInt().coerceAtLeast(1),
+            (raw.height * scale).toInt().coerceAtLeast(1),
+            true,
+        )
+    }.getOrNull()
 }
 
 private fun MediaMetadata.toTrackMeta(): TrackMeta? {

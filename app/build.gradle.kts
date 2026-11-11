@@ -24,8 +24,8 @@ android {
         applicationId = "com.oto.stats"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.6.0"
+        versionCode = 7
+        versionName = "0.7.0"
     }
 
     signingConfigs {
@@ -78,6 +78,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
+    implementation(libs.backdrop) // Liquid Glass, Apache-2.0: github.com/Kyant0/AndroidLiquidGlass
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 

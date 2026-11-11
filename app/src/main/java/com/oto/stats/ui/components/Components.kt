@@ -38,7 +38,7 @@ fun ScreenColumn(
         modifier = modifier
             .fillMaxSize()
             .background(OtoColors.Canvas),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 16.dp, bottom = 32.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = top + 16.dp, bottom = 130.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
