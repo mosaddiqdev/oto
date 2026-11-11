@@ -42,6 +42,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.util.lerp
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import kotlin.math.roundToInt
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.Shadow
 import com.oto.stats.tracking.TrackingStatus
@@ -162,12 +168,15 @@ private fun GlassHeader(
     modifier: Modifier = Modifier,
 ) {
     val glassOn by remember { derivedStateOf { progress() > 0.02f } }
-    Box(
-        modifier
-            .fillMaxWidth()
-            .then(
-                if (glassOn) {
-                    Modifier.drawBackdrop(
+    Box(modifier.fillMaxWidth()) {
+        if (glassOn) {
+            // The pane is taller than the header and reaches above the screen, so the glass edge
+            // (its highlight and shadow) is never visible along the top of the display.
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .extendUp(48.dp)
+                    .drawBackdrop(
                         backdrop = backdrop,
                         shape = {
                             val r = lerp(0f, 36f, progress()).dp
@@ -181,23 +190,45 @@ private fun GlassHeader(
                         highlight = { Highlight.Default.copy(alpha = progress()) },
                         shadow = { Shadow(alpha = progress()) },
                         onDrawSurface = { drawRect(OtoColors.Canvas.copy(alpha = 0.40f * progress())) },
-                    )
-                } else {
-                    Modifier
-                },
-            ),
-    ) {
+                    ),
+            )
+        }
         Row(
             Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.statusBars)
-                .height(64.dp)
+                // The bar gets a little shorter as it turns to glass: 64dp down to 52dp.
+                .layout { measurable, constraints ->
+                    val h = lerp(64.dp.toPx(), 52.dp.toPx(), progress()).roundToInt()
+                    val placeable = measurable.measure(constraints.copy(minHeight = h, maxHeight = h))
+                    layout(placeable.width, h) { placeable.place(0, 0) }
+                }
                 .padding(horizontal = 24.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(title, style = MaterialTheme.typography.headlineLarge, color = OtoColors.TextPrimary)
-            Surface(onClick = onSetup, shape = CircleShape, color = Color.Black.copy(alpha = 0.38f)) {
+            Text(
+                title,
+                modifier = Modifier.graphicsLayer {
+                    val scale = lerp(1f, 0.86f, progress())
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0f, 0.5f)
+                },
+                style = MaterialTheme.typography.headlineLarge,
+                color = OtoColors.TextPrimary,
+            )
+            Surface(
+                onClick = onSetup,
+                modifier = Modifier.graphicsLayer {
+                    val scale = lerp(1f, 0.92f, progress())
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(1f, 0.5f)
+                },
+                shape = CircleShape,
+                color = Color.Black.copy(alpha = 0.38f),
+            ) {
                 Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (needsAttention) {
                         Box(Modifier.size(7.dp).background(OtoColors.Warning, CircleShape))
@@ -208,6 +239,13 @@ private fun GlassHeader(
             }
         }
     }
+}
+
+/** Makes the element [by] taller upward without moving its bottom edge or changing the layout. */
+private fun Modifier.extendUp(by: Dp): Modifier = layout { measurable, constraints ->
+    val extra = by.roundToPx()
+    val placeable = measurable.measure(Constraints.fixed(constraints.maxWidth, constraints.maxHeight + extra))
+    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(0, -extra) }
 }
 
 /** What is playing, as a glass pill above the tab bar, on every tab except Now. Tap to go to Now. */
