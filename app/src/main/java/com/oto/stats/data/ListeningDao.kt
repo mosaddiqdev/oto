@@ -204,4 +204,191 @@ abstract class ListeningDao {
 
     @Query("SELECT COUNT(*) FROM listening_events WHERE sessionId LIKE 'demo:%'")
     abstract fun demoEventCount(): Flow<Int>
+
+    // ---- Stats. Every range is [startMs, endMs) in epoch ms. Days and hours use the UTC offset
+    // stored with each listen, so travelling never moves an old listen to another day. ----
+
+    /** Changes whenever a listen is added or its play time grows; drives live refresh. */
+    @Query("SELECT COUNT(*) + COALESCE(SUM(playedMs), 0) FROM listening_events")
+    abstract fun changeMarker(): Flow<Long>
+
+    @Query("SELECT MIN(startedAt) FROM listening_events")
+    abstract suspend fun firstEventAt(): Long?
+
+    @Query(
+        """
+        SELECT COUNT(*) AS plays,
+               COALESCE(SUM(playedMs), 0) AS playedMs,
+               COUNT(DISTINCT trackId) AS uniqueTracks,
+               COALESCE(SUM(CASE WHEN completionPct >= 90 THEN 1 ELSE 0 END), 0) AS fullListens,
+               COALESCE(SUM(CASE WHEN skipped THEN 1 ELSE 0 END), 0) AS skips
+        FROM listening_events
+        WHERE startedAt >= :startMs AND startedAt < :endMs
+        """,
+    )
+    abstract suspend fun headline(startMs: Long, endMs: Long): Headline
+
+    @Query(
+        """
+        SELECT COUNT(DISTINCT ta.artistId)
+        FROM listening_events e
+        JOIN track_artists ta ON ta.trackId = e.trackId
+        JOIN artists a ON a.id = ta.artistId
+        WHERE e.startedAt >= :startMs AND e.startedAt < :endMs AND a.normalizedName != :unknownKey
+        """,
+    )
+    abstract suspend fun uniqueArtists(startMs: Long, endMs: Long, unknownKey: String): Int
+
+    @Query(
+        """
+        SELECT ((startedAt + tzOffsetMinutes * 60000) / 86400000) AS day,
+               COALESCE(SUM(playedMs), 0) AS playedMs,
+               COUNT(*) AS plays
+        FROM listening_events
+        WHERE startedAt >= :startMs AND startedAt < :endMs
+        GROUP BY day
+        ORDER BY day
+        """,
+    )
+    abstract suspend fun dailyInRange(startMs: Long, endMs: Long): List<DayTotal>
+
+    /** Every local day that has any listening, for streaks (all time, not just the shown period). */
+    @Query(
+        """
+        SELECT DISTINCT ((startedAt + tzOffsetMinutes * 60000) / 86400000) AS day
+        FROM listening_events
+        ORDER BY day
+        """,
+    )
+    abstract suspend fun activeDays(): List<Long>
+
+    @Query(
+        """
+        SELECT t.id AS trackId, t.title AS title, t.artistText AS artist,
+               COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
+        FROM listening_events e
+        JOIN tracks t ON t.id = e.trackId
+        WHERE e.startedAt >= :startMs AND e.startedAt < :endMs
+        GROUP BY t.id
+        ORDER BY CASE WHEN :byTime = 1 THEN SUM(e.playedMs) ELSE COUNT(*) END DESC,
+                 COUNT(*) DESC, t.title
+        LIMIT :limit
+        """,
+    )
+    abstract suspend fun topTracks(startMs: Long, endMs: Long, byTime: Boolean, limit: Int): List<TopTrackRow>
+
+    /** A track with several artists counts in full for each of them. Unknown Artist is left out. */
+    @Query(
+        """
+        SELECT a.id AS artistId, a.name AS name,
+               COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
+        FROM listening_events e
+        JOIN track_artists ta ON ta.trackId = e.trackId
+        JOIN artists a ON a.id = ta.artistId
+        WHERE e.startedAt >= :startMs AND e.startedAt < :endMs AND a.normalizedName != :unknownKey
+        GROUP BY a.id
+        ORDER BY CASE WHEN :byTime = 1 THEN SUM(e.playedMs) ELSE COUNT(*) END DESC,
+                 COUNT(*) DESC, a.name
+        LIMIT :limit
+        """,
+    )
+    abstract suspend fun topArtists(
+        startMs: Long,
+        endMs: Long,
+        byTime: Boolean,
+        unknownKey: String,
+        limit: Int,
+    ): List<TopArtistRow>
+
+    /** Albums are the album text on the track, grouped with the primary artist. No album, no row. */
+    @Query(
+        """
+        SELECT MIN(t.album) AS album, a.name AS artist,
+               COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
+        FROM listening_events e
+        JOIN tracks t ON t.id = e.trackId
+        JOIN track_artists ta ON ta.trackId = t.id AND ta.position = 0
+        JOIN artists a ON a.id = ta.artistId
+        WHERE e.startedAt >= :startMs AND e.startedAt < :endMs
+          AND t.album IS NOT NULL AND TRIM(t.album) != ''
+        GROUP BY LOWER(TRIM(t.album)), a.id
+        ORDER BY CASE WHEN :byTime = 1 THEN SUM(e.playedMs) ELSE COUNT(*) END DESC,
+                 COUNT(*) DESC, album
+        LIMIT :limit
+        """,
+    )
+    abstract suspend fun topAlbums(startMs: Long, endMs: Long, byTime: Boolean, limit: Int): List<TopAlbumRow>
+
+    @Query(
+        """
+        SELECT ((startedAt + tzOffsetMinutes * 60000) % 86400000) / 3600000 AS hour,
+               COALESCE(SUM(playedMs), 0) AS playedMs,
+               COUNT(*) AS plays
+        FROM listening_events
+        WHERE startedAt >= :startMs AND startedAt < :endMs
+        GROUP BY hour
+        ORDER BY hour
+        """,
+    )
+    abstract suspend fun hourly(startMs: Long, endMs: Long): List<HourBucket>
+
+    @Query(
+        """
+        SELECT sourcePackage AS sourcePackage,
+               COALESCE(SUM(playedMs), 0) AS playedMs,
+               COUNT(*) AS plays
+        FROM listening_events
+        WHERE startedAt >= :startMs AND startedAt < :endMs
+        GROUP BY sourcePackage
+        ORDER BY playedMs DESC
+        """,
+    )
+    abstract suspend fun appShare(startMs: Long, endMs: Long): List<AppShareRow>
+
+    /**
+     * Replays: listens of a track beyond its first on the same local day.
+     * One day is the window so a song you love on repeat counts, a song you hear weekly does not.
+     */
+    @Query(
+        """
+        SELECT COALESCE(SUM(c - 1), 0) FROM (
+            SELECT COUNT(*) AS c
+            FROM listening_events
+            WHERE startedAt >= :startMs AND startedAt < :endMs
+            GROUP BY trackId, ((startedAt + tzOffsetMinutes * 60000) / 86400000)
+        )
+        """,
+    )
+    abstract suspend fun replayCount(startMs: Long, endMs: Long): Int
+
+    @Query(
+        """
+        SELECT t.title AS title, t.artistText AS artist, SUM(c - 1) AS total
+        FROM (
+            SELECT trackId, COUNT(*) AS c
+            FROM listening_events
+            WHERE startedAt >= :startMs AND startedAt < :endMs
+            GROUP BY trackId, ((startedAt + tzOffsetMinutes * 60000) / 86400000)
+        ) x
+        JOIN tracks t ON t.id = x.trackId
+        GROUP BY x.trackId
+        HAVING SUM(c - 1) > 0
+        ORDER BY total DESC, t.title
+        LIMIT 1
+        """,
+    )
+    abstract suspend fun mostReplayed(startMs: Long, endMs: Long): TrackCount?
+
+    @Query(
+        """
+        SELECT t.title AS title, t.artistText AS artist, COUNT(*) AS total
+        FROM listening_events e
+        JOIN tracks t ON t.id = e.trackId
+        WHERE e.startedAt >= :startMs AND e.startedAt < :endMs AND e.skipped = 1
+        GROUP BY t.id
+        ORDER BY total DESC, t.title
+        LIMIT 1
+        """,
+    )
+    abstract suspend fun mostSkipped(startMs: Long, endMs: Long): TrackCount?
 }

@@ -9,6 +9,7 @@ import com.oto.stats.data.OpenSessionStore
 import com.oto.stats.data.OtoDatabase
 import com.oto.stats.data.TrackingPrefs
 import com.oto.stats.diag.DiagLog
+import com.oto.stats.stats.StatsModel
 import com.oto.stats.tracking.ListenerWatchdogWorker
 import com.oto.stats.tracking.RunState
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +23,7 @@ class AppContainer(context: Context) {
 
     val database = OtoDatabase.build(context)
     val repository = ListeningRepository(database, appScope)
+    val stats = StatsModel(database.listeningDao(), appScope)
     val prefs = TrackingPrefs(context)
     val openSessions = OpenSessionStore(context)
     val artStore = ArtStore(context)
