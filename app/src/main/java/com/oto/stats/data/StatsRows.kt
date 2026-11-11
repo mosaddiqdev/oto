@@ -9,11 +9,25 @@ data class Headline(
     val skips: Int,
 )
 
-data class TopTrackRow(val trackId: Long, val title: String, val artist: String, val plays: Int, val playedMs: Long)
+data class TopTrackRow(
+    val trackId: Long,
+    val title: String,
+    val artist: String,
+    val identityKey: String,
+    val plays: Int,
+    val playedMs: Long,
+)
 
 data class TopArtistRow(val artistId: Long, val name: String, val plays: Int, val playedMs: Long)
 
-data class TopAlbumRow(val album: String, val artist: String, val plays: Int, val playedMs: Long)
+/** [identityKey] is one of the album's tracks, used to borrow its cover. */
+data class TopAlbumRow(
+    val album: String,
+    val artist: String,
+    val identityKey: String,
+    val plays: Int,
+    val playedMs: Long,
+)
 
 data class HourBucket(val hour: Int, val playedMs: Long, val plays: Int)
 

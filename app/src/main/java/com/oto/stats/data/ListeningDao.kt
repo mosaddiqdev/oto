@@ -264,7 +264,7 @@ abstract class ListeningDao {
 
     @Query(
         """
-        SELECT t.id AS trackId, t.title AS title, t.artistText AS artist,
+        SELECT t.id AS trackId, t.title AS title, t.artistText AS artist, t.identityKey AS identityKey,
                COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
         FROM listening_events e
         JOIN tracks t ON t.id = e.trackId
@@ -303,7 +303,7 @@ abstract class ListeningDao {
     /** Albums are the album text on the track, grouped with the primary artist. No album, no row. */
     @Query(
         """
-        SELECT MIN(t.album) AS album, a.name AS artist,
+        SELECT MIN(t.album) AS album, a.name AS artist, MIN(t.identityKey) AS identityKey,
                COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
         FROM listening_events e
         JOIN tracks t ON t.id = e.trackId

@@ -189,7 +189,7 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
         Box(Modifier.fillMaxSize().nestedScroll(scrollWatcher).extendUp(OVERSCAN_DP.dp).layerBackdrop(backdrop).background(OtoColors.Canvas)) {
             when (tab) {
                 Tab.Now -> NowScreen(container = container, state = state, headerProgress = headerProgress, onGrantAccess = actions.openAccessSettings)
-                Tab.Stats -> StatsScreen(model = container.stats, headerProgress = headerProgress)
+                Tab.Stats -> StatsScreen(model = container.stats, artStore = container.artStore, headerProgress = headerProgress)
                 Tab.History -> ComingSoon(headerProgress, "Every listen, grouped by day, searchable.")
                 Tab.Library -> ComingSoon(headerProgress, "Artists, albums and tracks you have played, with their numbers.")
             }
