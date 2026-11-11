@@ -362,6 +362,7 @@ class OtoListenerService : NotificationListenerService() {
         /** Cover art the player attached to the current track, if any. */
         var art: Bitmap? = null
             private set
+        private var artTrackKey: String? = null
 
         val tracker = PlaybackTracker(
             controller.packageName,
@@ -409,7 +410,14 @@ class OtoListenerService : NotificationListenerService() {
 
         private fun handleMetadata(metadata: MediaMetadata?) {
             val meta = metadata?.toTrackMeta()
-            art = metadata?.artwork()
+            // Some players send a second metadata update without the picture. Keep the cover
+            // while it is the same track, drop it when the track changes.
+            val trackKey = meta?.let { "${it.title}|${it.artist}" }
+            val fresh = metadata?.artwork()
+            when {
+                fresh != null -> { art = fresh; artTrackKey = trackKey }
+                trackKey != artTrackKey -> { art = null; artTrackKey = trackKey }
+            }
             if (meta != null) {
                 val key = "${meta.title}|${meta.artist}"
                 if (key != lastLoggedTrack) {
@@ -479,22 +487,25 @@ private fun positionOf(state: PlaybackState, now: Clock): Long {
     return state.position + (sinceUpdate * state.playbackSpeed).toLong()
 }
 
-/** The cover as a bitmap, shrunk so a few of them never weigh much memory. */
+/**
+ * The cover as a bitmap of our own, shrunk so a few of them never weigh much memory. It is a copy:
+ * the player owns the one in its metadata and may recycle it, and drawing a recycled bitmap
+ * crashes the app.
+ */
 private fun MediaMetadata.artwork(): Bitmap? {
     val raw = getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
         ?: getBitmap(MediaMetadata.METADATA_KEY_ART)
         ?: getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
         ?: return null
-    val longest = maxOf(raw.width, raw.height)
-    if (longest <= 720) return raw
-    val scale = 720f / longest
     return runCatching {
-        Bitmap.createScaledBitmap(
-            raw,
-            (raw.width * scale).toInt().coerceAtLeast(1),
-            (raw.height * scale).toInt().coerceAtLeast(1),
-            true,
-        )
+        if (raw.isRecycled) return null
+        val longest = maxOf(raw.width, raw.height)
+        val scale = if (longest > 720) 720f / longest else 1f
+        val width = (raw.width * scale).toInt().coerceAtLeast(1)
+        val height = (raw.height * scale).toInt().coerceAtLeast(1)
+        val soft = raw.copy(Bitmap.Config.ARGB_8888, false) ?: return null
+        if (width == soft.width && height == soft.height) soft
+        else Bitmap.createScaledBitmap(soft, width, height, true).also { if (it !== soft) soft.recycle() }
     }.getOrNull()
 }
 
