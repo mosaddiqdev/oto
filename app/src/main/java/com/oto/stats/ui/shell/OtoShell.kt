@@ -69,7 +69,10 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.effects.colorControls
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.oto.stats.AppContainer
 import com.oto.stats.ui.components.ComingSoon
 import com.oto.stats.ui.components.NavGlyph
@@ -80,6 +83,22 @@ import com.oto.stats.ui.debug.DebugScreen
 import com.oto.stats.ui.debug.DebugState
 import com.oto.stats.ui.now.NowScreen
 import com.oto.stats.ui.theme.OtoColors
+
+/*
+ * Glass recipe. Numbers measured from the open-source Spotify client the user pointed at
+ * (kota-zo/myspoti, which in turn builds on Kyant's backdrop): a dark tint, saturation boosted
+ * 1.6x, a SMALL blur so the refraction does the work, and lens depth plus chromatic aberration.
+ * The page colour is painted far beyond the recording first, so the blur never samples
+ * transparency (where it does, the sharp page shows through and the top edge looks like it
+ * vanished). Only the numbers are borrowed, no code.
+ */
+private val GlassTint = Color(0xFF1C1C22).copy(alpha = 0.42f)
+private val GlassHighlight = Highlight(width = 0.75.dp, alpha = 0.9f)
+private val GlassShadow = Shadow(radius = 18.dp, color = Color.Black.copy(alpha = 0.22f))
+private val PageFill: DrawScope.(DrawScope.() -> Unit) -> Unit = { drawPage ->
+    drawRect(OtoColors.Canvas, topLeft = Offset(-20_000f, -20_000f), size = Size(40_000f, 40_000f))
+    drawPage()
+}
 
 private enum class Tab(val label: String, val icon: NavIcon) {
     Now("Now", NavIcon.Now),
@@ -185,12 +204,14 @@ private fun GlassHeader(
                         },
                         effects = {
                             val p = progress()
-                            blur(12.dp.toPx() * p)
-                            lens(22.dp.toPx() * p, 28.dp.toPx() * p)
+                            colorControls(brightness = -0.03f, saturation = 1f + 0.6f * p)
+                            blur(10.dp.toPx() * p)
+                            lens(26.dp.toPx() * p, 36.dp.toPx() * p, depthEffect = true, chromaticAberration = true)
                         },
-                        highlight = { Highlight.Default.copy(alpha = progress()) },
-                        shadow = { Shadow(alpha = progress()) },
-                        onDrawSurface = { drawRect(OtoColors.Canvas.copy(alpha = 0.40f * progress())) },
+                        highlight = { GlassHighlight.copy(alpha = GlassHighlight.alpha * progress()) },
+                        shadow = { GlassShadow.copy(alpha = progress()) },
+                        onDrawBackdrop = PageFill,
+                        onDrawSurface = { drawRect(GlassTint.copy(alpha = GlassTint.alpha * progress())) },
                     ),
             )
         }
@@ -266,11 +287,14 @@ private fun MiniPlayer(backdrop: Backdrop, onClick: () -> Unit, modifier: Modifi
                 backdrop = backdrop,
                 shape = { shape },
                 effects = {
-                    vibrancy()
-                    blur(10.dp.toPx())
-                    lens(16.dp.toPx(), 20.dp.toPx())
+                    colorControls(brightness = -0.03f, saturation = 1.6f)
+                    blur(5.dp.toPx())
+                    lens(22.dp.toPx(), 36.dp.toPx(), depthEffect = true, chromaticAberration = true)
                 },
-                onDrawSurface = { drawRect(OtoColors.Canvas.copy(alpha = 0.42f)) },
+                highlight = { GlassHighlight },
+                shadow = { GlassShadow },
+                onDrawBackdrop = PageFill,
+                onDrawSurface = { drawRect(GlassTint) },
             )
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 10.dp),
@@ -319,11 +343,14 @@ private fun GlassTabBar(selected: Tab, onSelect: (Tab) -> Unit, backdrop: Backdr
                 backdrop = backdrop,
                 shape = { shape },
                 effects = {
-                    vibrancy()
-                    blur(10.dp.toPx())
-                    lens(18.dp.toPx(), 22.dp.toPx())
+                    colorControls(brightness = -0.03f, saturation = 1.6f)
+                    blur(5.dp.toPx())
+                    lens(22.dp.toPx(), 36.dp.toPx(), depthEffect = true, chromaticAberration = true)
                 },
-                onDrawSurface = { drawRect(OtoColors.Canvas.copy(alpha = 0.42f)) },
+                highlight = { GlassHighlight },
+                shadow = { GlassShadow },
+                onDrawBackdrop = PageFill,
+                onDrawSurface = { drawRect(GlassTint) },
             ),
     ) {
         val tabWidth = (maxWidth - pad * 2) / Tab.entries.size
