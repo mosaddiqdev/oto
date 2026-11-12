@@ -19,7 +19,7 @@ Sources: teardown of Wrapped, Replay, stats.fm, Last.fm, ListenBrainz, Pano; emo
 ## 2. Decisions
 
 1. **Two modes.** A live **Stats dashboard** (this doc) and, later, a **Recap story** (week, month, year) built from one template. Posters are *exports*, not scroll content.
-2. **Our signature: the yellow label.** The hero is a flat Tape Yellow card with giant black numerals, like a cassette label. Flat field, maximum contrast, instantly Oto, and it uses the single accent allowed per viewport. No gradients behind numbers.
+2. **Our signature: the yellow label (revised in 0.15.1: lit numerals on a dark card, no flat yellow field).** The hero was a flat Tape Yellow card with giant black numerals, like a cassette label. Flat field, maximum contrast, instantly Oto, and it uses the single accent allowed per viewport. No gradients behind numbers.
 3. **Cover-art colour lives only in exports and thin tints.** In the app, covers carry the colour. Posters use cover-derived colour on a flat field.
 4. **Honest personal superlatives instead of fake percentiles.** We have no population, so "top 1%" would be a lie. We compare you with *you*: "Your 2nd biggest month of 14", "Longest streak since March".
 5. **Explainable labels.** Every personality label shows the rule behind it ("Night Owl: 41% of listening after midnight"). No predictions (no "Listening Age").

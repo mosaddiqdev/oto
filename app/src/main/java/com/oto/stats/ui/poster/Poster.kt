@@ -78,7 +78,7 @@ val PosterInk = Color(0xFFFFFFFF)
 val PosterInkSoft = Color(0xB3FFFFFF)
 
 /** Fine film grain, made once. Takes the digital flatness out of big gradients. */
-private object Grain {
+internal object Grain {
     val brush: ShaderBrush by lazy {
         val size = 96
         val rnd = Random(7)

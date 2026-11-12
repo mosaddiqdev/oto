@@ -55,7 +55,7 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
     val key = ui.periodLabel + kind.name
 
     item(key = "hero") {
-        HeroCard(d, ui.periodLabel, kind, artStore, Modifier.cardEnter(0, loaded))
+        HeroCard(d, ui.periodLabel, kind, Modifier.cardEnter(0, loaded))
     }
     item(key = "days") {
         StatsSection("Your days", sentence = daysSentence(d.bars), modifier = Modifier.cardEnter(1, loaded)) {
