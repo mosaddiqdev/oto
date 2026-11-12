@@ -27,11 +27,12 @@ fun TrackCover(
     artStore: ArtStore,
     size: Dp,
     modifier: Modifier = Modifier,
+    circle: Boolean = false,
 ) {
     val art by produceState<ImageBitmap?>(initialValue = artStore.peek(identityKey), identityKey) {
         value = artStore.load(identityKey)
     }
-    val shape = RoundedCornerShape(size * 0.22f)
+    val shape = if (circle) androidx.compose.foundation.shape.CircleShape else RoundedCornerShape(size * 0.22f)
     Box(
         modifier
             .size(size)

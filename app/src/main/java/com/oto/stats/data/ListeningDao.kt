@@ -281,7 +281,15 @@ abstract class ListeningDao {
     @Query(
         """
         SELECT a.id AS artistId, a.name AS name,
-               COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
+               COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs,
+               (SELECT t2.identityKey
+                  FROM listening_events e2
+                  JOIN tracks t2 ON t2.id = e2.trackId
+                  JOIN track_artists ta2 ON ta2.trackId = t2.id
+                 WHERE ta2.artistId = a.id AND e2.startedAt >= :startMs AND e2.startedAt < :endMs
+                 GROUP BY t2.id
+                 ORDER BY SUM(e2.playedMs) DESC
+                 LIMIT 1) AS identityKey
         FROM listening_events e
         JOIN track_artists ta ON ta.trackId = e.trackId
         JOIN artists a ON a.id = ta.artistId

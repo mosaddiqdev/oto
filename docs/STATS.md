@@ -104,7 +104,7 @@ Each chart container has a spoken summary ("Listening time this month: 41 hours,
 0. Clean slate (0.15.2): cards deleted, screen is a shell.
 1. Period control into the glass header (0.15.3: done, compact bar grows in the glass as the in-page control scrolls away; the title becomes the period name).
 2. Hero (0.16.0: built, see docs/STATS_HERO.md).
-3. Most played, then its full list.
+3. Most played (0.17.0: card built, see docs/STATS_MOST_PLAYED.md), then its full list.
 4. Your days.
 5. Discovery.
 6. Your hour.
@@ -113,3 +113,6 @@ Each chart container has a spoken summary ("Listening time this month: 41 hours,
 9. How you listen.
 10. Poster picker.
 11. Detail screens and doorways wired as each card lands.
+
+## 11. Colour rule (decided)
+One accent, Tape Yellow, for emphasis in the data. Semantic colours (green, orange, red) only for status: tracking and permission state, errors. Never in the data itself: listening more or less is not good or bad, so up is yellow and down is quiet grey. Categories (such as apps) use steps of yellow or neutral greys with direct labels. Cover-derived colour only on exported posters.

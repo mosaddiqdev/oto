@@ -14,6 +14,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -69,6 +72,16 @@ fun StatsScreen(model: StatsModel, artStore: ArtStore, headerProgress: MutableFl
 private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsModel, artStore: ArtStore, loaded: Boolean) {
     item(key = "hero") {
         HeroCard(d, ui.periodLabel, ui.selection.kind, Modifier.cardEnter(0, loaded))
+    }
+    item(key = "most") {
+        var tab by rememberSaveable { mutableIntStateOf(0) }
+        StatsSection(
+            "Most played",
+            sentence = mostPlayedSentence(d, tab, ui.selection.byTime),
+            modifier = Modifier.cardEnter(1, loaded),
+        ) {
+            MostPlayedCard(d, ui.selection.byTime, model::setByTime, tab, { tab = it }, artStore, ui.periodLabel + ui.selection.kind.name)
+        }
     }
 }
 

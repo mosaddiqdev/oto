@@ -18,7 +18,8 @@ data class TopTrackRow(
     val playedMs: Long,
 )
 
-data class TopArtistRow(val artistId: Long, val name: String, val plays: Int, val playedMs: Long)
+/** [identityKey] is the artist's most played track in the window, used to borrow its cover (we have no artist photos). */
+data class TopArtistRow(val artistId: Long, val name: String, val plays: Int, val playedMs: Long, val identityKey: String?)
 
 /** [identityKey] is one of the album's tracks, used to borrow its cover. */
 data class TopAlbumRow(
