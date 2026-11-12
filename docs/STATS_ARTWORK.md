@@ -8,7 +8,7 @@ Everything else is optional enrichment, off with one switch in Setup ("Fetch art
 - Match: exact normalised name (case, accents, punctuation ignored); several matches pick the one with the most fans; Deezer's "no photo" placeholder is rejected.
 - Save: `picture_xl` (1000px) shrunk to 300px JPEG in `ArtStore` under `artist:<id>`.
 - On demand: only for artists a screen is showing (Most played, Artists tab). Until the photo arrives the circle shows the cover of the artist's top track, then the photo fades in.
-- Polite: one request at a time, 250ms gap, only on an unmetered network, failures remembered for 14 days (`.none` marker), network errors are not remembered.
+- Polite: one request at a time, 250ms gap, any connected network (small files), failures remembered for 14 days (`.none` marker), network errors are not remembered.
 - Needs the INTERNET permission, which Oto did not have before. It is used by nothing else.
 
 ## Later

@@ -243,7 +243,7 @@ fun DebugScreen(
                     Column(Modifier.weight(1f)) {
                         Text("Fetch artist photos", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                         Text(
-                            "Looks up artist photos on Deezer for the artists you see in Stats. Only the artist name is sent, only on Wi-Fi, and nothing else leaves your phone. Off keeps Oto fully offline.",
+                            "Looks up artist photos on Deezer for the artists you see in Stats. Only the artist name is sent and nothing else leaves your phone. Off keeps Oto fully offline.",
                             style = MaterialTheme.typography.bodySmall,
                             color = OtoColors.TextTertiary,
                         )
