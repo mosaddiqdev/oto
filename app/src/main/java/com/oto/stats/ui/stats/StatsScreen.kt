@@ -6,7 +6,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -29,12 +33,22 @@ import java.util.Locale
  */
 
 @Composable
-fun StatsScreen(model: StatsModel, artStore: ArtStore, headerProgress: MutableFloatState) {
+fun StatsScreen(model: StatsModel, artStore: ArtStore, headerProgress: MutableFloatState, periodCollapse: MutableFloatState) {
     val ui by model.state.collectAsState()
     // Entrances play once when the tab first shows data, not on every scroll back.
     val loaded = ui.content is StatsUiState.Content.Ready
 
-    ScreenColumn(headerProgress, spacing = OtoSpace.SectionGap) {
+    val listState = rememberLazyListState()
+    // The in-page period control scrolls away; as it goes, the glass header grows its own compact copy.
+    val goneAt = with(LocalDensity.current) { 56.dp.toPx() }
+    val fadeOver = with(LocalDensity.current) { 64.dp.toPx() }
+    LaunchedEffect(listState, goneAt, fadeOver) {
+        snapshotFlow {
+            if (listState.firstVisibleItemIndex > 0) 1f
+            else ((listState.firstVisibleItemScrollOffset - goneAt) / fadeOver).coerceIn(0f, 1f)
+        }.collect { periodCollapse.floatValue = it }
+    }
+    ScreenColumn(headerProgress, spacing = OtoSpace.SectionGap, state = listState) {
         item(key = "period") { PeriodControl(ui, model) }
         when (val c = ui.content) {
             StatsUiState.Content.Loading -> Unit

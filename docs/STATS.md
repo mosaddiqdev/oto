@@ -102,7 +102,7 @@ Each chart container has a spoken summary ("Listening time this month: 41 hours,
 ## 10. Build order (one card per step, shipped and checked before the next)
 
 0. Clean slate (0.15.2): cards deleted, screen is a shell.
-1. Period control into the glass header.
+1. Period control into the glass header (0.15.3: done, compact bar grows in the glass as the in-page control scrolls away; the title becomes the period name).
 2. Hero.
 3. Most played, then its full list.
 4. Your days.

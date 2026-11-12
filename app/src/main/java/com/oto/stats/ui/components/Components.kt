@@ -63,10 +63,10 @@ fun ScreenColumn(
     headerProgress: MutableFloatState,
     modifier: Modifier = Modifier,
     spacing: Dp = 16.dp,
+    state: LazyListState = rememberLazyListState(),
     content: LazyListScope.() -> Unit,
 ) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + HEADER_CONTENT_DP.dp
-    val state = rememberLazyListState()
     TrackHeaderProgress(state, headerProgress, fadeDp = 32.dp)
     LazyColumn(
         state = state,

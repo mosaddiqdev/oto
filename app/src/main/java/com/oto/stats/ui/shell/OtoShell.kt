@@ -1,7 +1,10 @@
 package com.oto.stats.ui.shell
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -103,6 +106,7 @@ import com.oto.stats.ui.debug.DebugActions
 import com.oto.stats.ui.debug.DebugScreen
 import com.oto.stats.ui.debug.DebugState
 import com.oto.stats.ui.now.NowScreen
+import com.oto.stats.ui.stats.CompactPeriodBar
 import com.oto.stats.ui.stats.StatsScreen
 import com.oto.stats.ui.theme.OtoColors
 
@@ -156,7 +160,10 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
 
     val backdrop = rememberLayerBackdrop()
     val headerProgress = remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(tab) { headerProgress.floatValue = 0f }
+    // Stats only: 0..1, how far the in-page period control has scrolled away. The header grows its compact copy with it.
+    val periodCollapse = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(tab) { headerProgress.floatValue = 0f; periodCollapse.floatValue = 0f }
+    val statsUi = if (tab == Tab.Stats) container.stats.state.collectAsState().value else null
     val snapshot by TrackingStatus.nowPlaying.collectAsState()
     val needsAttention = !state.accessGranted || !state.notificationsGranted || !state.batteryExempt
 
@@ -189,7 +196,7 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
         Box(Modifier.fillMaxSize().nestedScroll(scrollWatcher).extendUp(OVERSCAN_DP.dp).layerBackdrop(backdrop).background(OtoColors.Canvas)) {
             when (tab) {
                 Tab.Now -> NowScreen(container = container, state = state, headerProgress = headerProgress, onGrantAccess = actions.openAccessSettings)
-                Tab.Stats -> StatsScreen(model = container.stats, artStore = container.artStore, headerProgress = headerProgress)
+                Tab.Stats -> StatsScreen(model = container.stats, artStore = container.artStore, headerProgress = headerProgress, periodCollapse = periodCollapse)
                 Tab.History -> ComingSoon(headerProgress, "Every listen, grouped by day, searchable.")
                 Tab.Library -> ComingSoon(headerProgress, "Artists, albums and tracks you have played, with their numbers.")
             }
@@ -197,6 +204,9 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
 
         GlassHeader(
             title = tab.label,
+            swapTitle = statsUi?.periodLabel?.takeIf { it.isNotBlank() },
+            extraReveal = { periodCollapse.floatValue },
+            extra = if (statsUi != null) ({ CompactPeriodBar(statsUi, container.stats) }) else null,
             progress = { headerProgress.floatValue },
             needsAttention = needsAttention,
             onSetup = { showSetup = true },
@@ -227,6 +237,9 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
 @Composable
 private fun GlassHeader(
     title: String,
+    swapTitle: String?,
+    extraReveal: () -> Float,
+    extra: (@Composable () -> Unit)?,
     progress: () -> Float,
     needsAttention: Boolean,
     onSetup: () -> Unit,
@@ -261,10 +274,10 @@ private fun GlassHeader(
                     ),
             )
         }
+        Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
                 // The bar gets a little shorter as it turns to glass: 64dp down to 52dp.
                 .layout { measurable, constraints ->
                     val h = lerp(64.dp.toPx(), 52.dp.toPx(), progress()).roundToInt()
@@ -275,8 +288,15 @@ private fun GlassHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            val showSwap = swapTitle != null && extra != null && extraReveal() > 0.5f
+            Crossfade(
+                targetState = if (showSwap) swapTitle!! else title,
+                animationSpec = tween(180),
+                label = "headerTitle",
+            ) { shown ->
             Text(
-                title,
+                shown,
+                maxLines = 1,
                 modifier = Modifier.graphicsLayer {
                     val scale = lerp(1f, 0.86f, progress())
                     scaleX = scale
@@ -286,6 +306,7 @@ private fun GlassHeader(
                 style = MaterialTheme.typography.headlineLarge,
                 color = OtoColors.TextPrimary,
             )
+            }
             val setupSource = remember { MutableInteractionSource() }
             val setupPress = rememberPress(setupSource)
             Surface(
@@ -308,6 +329,23 @@ private fun GlassHeader(
                     Text("Setup", style = MaterialTheme.typography.labelMedium, color = Color.White)
                 }
             }
+        }
+        if (extra != null) {
+            val reveal = extraReveal()
+            if (reveal > 0.01f) {
+                Box(
+                    Modifier
+                        .padding(horizontal = 12.dp)
+                        .layout { measurable, constraints ->
+                            val h = (52.dp.toPx() * reveal).roundToInt()
+                            val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = 52.dp.roundToPx()))
+                            layout(placeable.width, h) { placeable.place(0, 0) }
+                        }
+                        .clipToBounds()
+                        .graphicsLayer { alpha = reveal },
+                ) { extra() }
+            }
+        }
         }
     }
 }

@@ -117,7 +117,7 @@ fun Segmented(
 }
 
 @Composable
-private fun Chevron(left: Boolean, enabled: Boolean, description: String, onClick: () -> Unit) {
+internal fun Chevron(left: Boolean, enabled: Boolean, description: String, onClick: () -> Unit) {
     val tint = if (enabled) OtoColors.TextPrimary else OtoColors.Hairline
     val haptic = LocalHapticFeedback.current
     Box(
@@ -179,5 +179,21 @@ fun PeriodControl(ui: StatsUiState, model: StatsModel) {
             }
             Chevron(left = false, enabled = ui.canGoNext, description = "Next period", onClick = model::next)
         }
+    }
+}
+
+/** The same control, shrunk into the glass header: previous, Week / Month / Year / All, next. The title is the header's own. */
+@Composable
+fun CompactPeriodBar(ui: StatsUiState, model: StatsModel, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Chevron(left = true, enabled = ui.canGoPrevious, description = "Previous period", onClick = model::previous)
+        Segmented(
+            options = listOf("Week", "Month", "Year", "All"),
+            selectedIndex = ui.selection.kind.ordinal,
+            onSelect = { model.selectKind(PeriodKind.entries[it]) },
+            modifier = Modifier.weight(1f),
+            height = 36.dp,
+        )
+        Chevron(left = false, enabled = ui.canGoNext, description = "Next period", onClick = model::next)
     }
 }
