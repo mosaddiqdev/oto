@@ -67,8 +67,8 @@ fun StatsScreen(model: StatsModel, artStore: ArtStore, headerProgress: MutableFl
 /** Cards are rebuilt one at a time, in the order set out in docs/STATS.md. Nothing is drawn here until its turn. */
 @Suppress("UNUSED_PARAMETER")
 private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsModel, artStore: ArtStore, loaded: Boolean) {
-    item(key = "rebuild") {
-        Note("Rebuilding, one card at a time", "Next up: the hero card. Order and rules are in docs/STATS.md.")
+    item(key = "hero") {
+        HeroCard(d, ui.periodLabel, ui.selection.kind, Modifier.cardEnter(0, loaded))
     }
 }
 

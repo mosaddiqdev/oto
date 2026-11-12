@@ -138,7 +138,11 @@ fun formatDuration(ms: Long): String {
     val minutes = (ms / 60_000).coerceAtLeast(0)
     val h = minutes / 60
     val m = minutes % 60
-    return if (h > 0) "${h}h ${String.format(Locale.US, "%02d", m)}m" else "${m}m"
+    return when {
+        h >= 1000 -> String.format(Locale.US, "%,dh", h) // minutes are noise at this scale
+        h > 0 -> "${h}h ${String.format(Locale.US, "%02d", m)}m"
+        else -> "${m}m"
+    }
 }
 
 fun formatCount(n: Int): String = String.format(Locale.US, "%,d", n)

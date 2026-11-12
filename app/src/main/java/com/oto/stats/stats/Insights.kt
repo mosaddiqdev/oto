@@ -58,6 +58,7 @@ object Insights {
         val minutes = totalMs / 60_000
         val hours = minutes / 60.0
         return when {
+            hours >= 24 * 365 -> String.format(Locale.US, "That's %.1f years of nonstop music.", hours / (24 * 365))
             hours >= 48 -> String.format(Locale.US, "That's %.1f days of nonstop music.", hours / 24)
             minutes >= 84 -> "That's about ${minutes / 42} albums back to back."
             minutes >= 42 -> "That's about one full album."
