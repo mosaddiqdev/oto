@@ -1,6 +1,8 @@
 package com.oto.stats.ui.stats
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -8,10 +10,14 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,6 +35,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -70,8 +77,12 @@ fun HeroCard(d: StatsData, periodLabel: String, kind: PeriodKind, modifier: Modi
     val finalMs = d.headline.playedMs
     val ms = rememberCountUp(finalMs, key, hero = true)
     val delta = StatsMath.delta(finalMs, d.previous?.playedMs ?: 0)
-    val sentence = heroSentence(d, kind, delta)
-    val spoken = "Listening time, $periodLabel: ${spokenDuration(finalMs)}. $sentence"
+    val story = heroStory(d, kind, delta)
+    val spoken = buildString {
+        append("Listening time, $periodLabel: ${spokenDuration(finalMs)}. ")
+        if (delta != null && d.comparisonName != null) append("${deltaSpoken(delta)} ${beforeLabel(d.comparisonName, d.comparisonPartial)}. ")
+        append(story)
+    }
     val shape = RoundedCornerShape(OtoSpace.CardRadius)
     // The glow warms up with the count, so the card seems to switch on.
     val warmth = if (finalMs > 0) (ms.toFloat() / finalMs).coerceIn(0f, 1f) else 1f
@@ -82,13 +93,15 @@ fun HeroCard(d: StatsData, periodLabel: String, kind: PeriodKind, modifier: Modi
         Column(
             modifier
                 .fillMaxWidth()
+                // Before clip and padding, so a change between layouts (comparison, facts, one or two lines) eases instead of jumping.
+                .animateContentSize(tween(260, easing = OtoMotion.Decelerate))
                 .clip(shape)
                 .background(HeroBase)
                 .drawBehind {
                     drawRect(
                         Brush.radialGradient(
                             listOf(OtoColors.Accent.copy(alpha = 0.08f + 0.12f * warmth), Color.Transparent),
-                            center = Offset(size.width * 0.22f, size.height * 0.40f),
+                            center = Offset(size.width * 0.22f, size.height * 0.42f),
                             radius = size.width * 0.85f,
                         ),
                     )
@@ -98,32 +111,57 @@ fun HeroCard(d: StatsData, periodLabel: String, kind: PeriodKind, modifier: Modi
                 .semantics(mergeDescendants = true) { contentDescription = spoken }
                 .padding(24.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("LISTENING TIME", style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp), color = OtoColors.TextTertiary)
-                Text(periodLabel.uppercase(), style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp), color = OtoColors.TextTertiary, maxLines = 1)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "LISTENING TIME \u00B7 ${periodLabel.uppercase()}",
+                    style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp),
+                    color = OtoColors.TextTertiary,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (delta != null && d.previous != null && d.comparisonName != null) DeltaPill(delta, Modifier.padding(start = 12.dp))
             }
-            HeroNumerals(shown = ms, final = finalMs, modifier = Modifier.padding(top = 30.dp))
+            HeroNumerals(shown = ms, final = finalMs, modifier = Modifier.padding(top = 26.dp))
             if (delta != null && d.previous != null && d.comparisonName != null) {
                 Comparison(
-                    delta = delta,
                     nowLabel = periodLabel,
                     nowMs = finalMs,
-                    beforeLabel = beforeLabel(d.comparisonName, d.comparisonPartial),
+                    beforeLabel = beforeLabel(d.comparisonName, d.comparisonPartial).removePrefix("Same days of ").removePrefix("Same days "),
                     beforeMs = d.previous.playedMs,
                     key = key,
-                    modifier = Modifier.padding(top = 24.dp),
+                    modifier = Modifier.padding(top = 28.dp),
                 )
             } else {
-                Facts(d, Modifier.padding(top = 24.dp))
+                Facts(d, Modifier.padding(top = 28.dp))
             }
             Text(
-                sentence,
+                story,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
                 color = OtoColors.TextSecondary,
                 modifier = Modifier.padding(top = 20.dp),
             )
         }
     }
+}
+
+/** The change at a glance. Yellow when up; quiet grey when down, because listening less is not an error. */
+@Composable
+private fun DeltaPill(delta: StatsMath.Delta, modifier: Modifier = Modifier) {
+    val up = delta.direction == StatsMath.Direction.UP
+    Text(
+        when (delta.direction) {
+            StatsMath.Direction.UP -> "\u25B2 ${delta.percent}%"
+            StatsMath.Direction.DOWN -> "\u25BC ${delta.percent}%"
+            StatsMath.Direction.FLAT -> "= same"
+        },
+        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+        color = if (up) OtoColors.Accent else OtoColors.TextSecondary,
+        modifier = modifier
+            .clip(CircleShape)
+            .background(if (up) OtoColors.Accent.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.08f))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
 }
 
 /**
@@ -179,50 +217,58 @@ private fun HeroNumerals(shown: Long, final: Long, modifier: Modifier = Modifier
     }
 }
 
-/** This period against the same stretch of the one before, as two bars on one scale. */
+/**
+ * One track. The yellow fill is this period, the white tick is where the comparison window ended up, on the same scale.
+ * Fill past the tick means ahead of it. Under it a two-part legend names both with their values.
+ */
 @Composable
-private fun Comparison(
-    delta: StatsMath.Delta, nowLabel: String, nowMs: Long, beforeLabel: String, beforeMs: Long, key: String, modifier: Modifier = Modifier,
-) {
+private fun Comparison(nowLabel: String, nowMs: Long, beforeLabel: String, beforeMs: Long, key: String, modifier: Modifier = Modifier) {
     val reduced = rememberReducedMotion()
-    val top = maxOf(nowMs, beforeMs, 1L).toFloat()
+    // 8% headroom so the longer of the two never touches the end of the track.
+    val top = maxOf(nowMs, beforeMs, 1L) * 1.08f
     val nowTarget = (nowMs / top).coerceIn(0f, 1f)
     val beforeTarget = (beforeMs / top).coerceIn(0f, 1f)
-    val nowFill = remember(key) { Animatable(if (reduced) nowTarget else 0f) }
-    val beforeFill = remember(key) { Animatable(if (reduced) beforeTarget else 0f) }
-    LaunchedEffect(key, nowTarget, beforeTarget) {
+    val fill = remember(key) { Animatable(if (reduced) nowTarget else 0f) }
+    val tick = remember(key) { Animatable(if (reduced) 1f else 0f) }
+    LaunchedEffect(key, nowTarget) {
         if (reduced) {
-            nowFill.snapTo(nowTarget); beforeFill.snapTo(beforeTarget)
+            fill.snapTo(nowTarget); tick.snapTo(1f)
         } else {
-            nowFill.animateTo(nowTarget, OtoMotion.countUp(hero = true))
-            beforeFill.animateTo(beforeTarget, OtoMotion.countUp(hero = true))
+            fill.animateTo(nowTarget, OtoMotion.countUp(hero = true))
+            tick.animateTo(1f, tween(220))
         }
     }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        BarRow(nowLabel, formatDuration(nowMs) + deltaText(delta), nowFill.value.coerceIn(0f, 1f), OtoColors.Accent, strong = true)
-        BarRow(beforeLabel, formatDuration(beforeMs), beforeFill.value.coerceIn(0f, 1f), OtoColors.Surface3, strong = false)
-    }
-}
-
-@Composable
-private fun BarRow(label: String, value: String, fraction: Float, color: Color, strong: Boolean) {
-    val text = if (strong) OtoColors.TextPrimary else OtoColors.TextTertiary
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = text, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-            Text(
-                value,
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = if (strong) FontWeight.SemiBold else FontWeight.Normal),
-                color = text,
-                maxLines = 1,
-                modifier = Modifier.padding(start = 12.dp),
-            )
+    Column(modifier) {
+        Canvas(Modifier.fillMaxWidth().height(20.dp)) {
+            val h = 10.dp.toPx()
+            val y = (size.height - h) / 2
+            drawRoundRect(Color.White.copy(alpha = 0.06f), topLeft = Offset(0f, y), size = Size(size.width, h), cornerRadius = CornerRadius(h / 2))
+            val w = (size.width * fill.value.coerceIn(0f, 1f)).coerceAtLeast(if (nowMs > 0) h else 0f)
+            if (w > 0f) {
+                drawRoundRect(
+                    Brush.horizontalGradient(listOf(Color(0xFFC9A91C), OtoColors.Accent), endX = w.coerceAtLeast(1f)),
+                    topLeft = Offset(0f, y), size = Size(w, h), cornerRadius = CornerRadius(h / 2),
+                )
+            }
+            val x = size.width * beforeTarget
+            drawLine(Color.White.copy(alpha = 0.78f * tick.value.coerceIn(0f, 1f)), Offset(x, 0f), Offset(x, size.height), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
         }
-        Canvas(Modifier.fillMaxWidth().height(8.dp)) {
-            drawRoundRect(Color.White.copy(alpha = 0.05f), size = size, cornerRadius = CornerRadius(size.height / 2))
-            if (fraction > 0f) {
-                val w = (size.width * fraction).coerceAtLeast(size.height)
-                drawRoundRect(color, size = Size(w, size.height), cornerRadius = CornerRadius(size.height / 2))
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.weight(1f, fill = false), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(OtoColors.Accent, RoundedCornerShape(2.dp)))
+                Text(
+                    formatDuration(nowMs), style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = OtoColors.TextPrimary, maxLines = 1, modifier = Modifier.padding(start = 6.dp),
+                )
+                Text(nowLabel, style = MaterialTheme.typography.bodySmall, color = OtoColors.TextTertiary, maxLines = 1, modifier = Modifier.padding(start = 5.dp, end = 12.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(2.dp).height(10.dp).background(Color.White.copy(alpha = 0.78f)))
+                Text(
+                    formatDuration(beforeMs), style = MaterialTheme.typography.bodySmall,
+                    color = OtoColors.TextSecondary, maxLines = 1, modifier = Modifier.padding(start = 6.dp),
+                )
+                Text(beforeLabel, style = MaterialTheme.typography.bodySmall, color = OtoColors.TextTertiary, maxLines = 1, modifier = Modifier.padding(start = 5.dp))
             }
         }
     }
@@ -250,10 +296,10 @@ private fun androidx.compose.foundation.layout.RowScope.Fact(value: String, labe
     }
 }
 
-private fun deltaText(delta: StatsMath.Delta) = when (delta.direction) {
-    StatsMath.Direction.UP -> "  ▲ ${delta.percent}%"
-    StatsMath.Direction.DOWN -> "  ▼ ${delta.percent}%"
-    StatsMath.Direction.FLAT -> "  = same"
+private fun deltaSpoken(delta: StatsMath.Delta) = when (delta.direction) {
+    StatsMath.Direction.UP -> "Up ${delta.percent} percent on"
+    StatsMath.Direction.DOWN -> "Down ${delta.percent} percent on"
+    StatsMath.Direction.FLAT -> "Same as"
 }
 
 private fun beforeLabel(name: String, partial: Boolean): String {
@@ -274,18 +320,18 @@ internal fun spokenDuration(ms: Long): String {
     }
 }
 
-/** One or two honest sentences, each backed by a computed number. */
-internal fun heroSentence(d: StatsData, kind: PeriodKind, delta: StatsMath.Delta?): String {
-    val parts = ArrayList<String>(2)
+/**
+ * The one line under the card. The percentage and both values are already on the card, so this adds meaning:
+ * where the period ranks in your own history, else the plain difference, else a human-scale equivalent.
+ */
+internal fun heroStory(d: StatsData, kind: PeriodKind, delta: StatsMath.Delta?): String {
+    d.rank?.let { r -> PeriodRank.sentence(r, kind).takeIf { it.isNotEmpty() }?.let { return it } }
     val prev = d.previous?.playedMs
     val name = d.comparisonName
     if (delta != null && prev != null && name != null && delta.direction != StatsMath.Direction.FLAT) {
         val diff = formatDuration(abs(d.headline.playedMs - prev))
         val more = if (d.headline.playedMs >= prev) "more" else "less"
-        val tail = if (d.comparisonPartial) " so far" else ""
-        parts.add("$diff $more than $name$tail.")
+        return "$diff $more than $name${if (d.comparisonPartial) " so far" else ""}."
     }
-    d.rank?.let { PeriodRank.sentence(it, kind).takeIf { s -> s.isNotEmpty() }?.let(parts::add) }
-    if (parts.isEmpty()) parts.add(d.moments.equivalent)
-    return parts.joinToString(" ")
+    return d.moments.equivalent
 }

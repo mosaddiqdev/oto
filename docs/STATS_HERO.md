@@ -16,10 +16,15 @@ Dark card (#151515), 28dp radius, rim of light on the top edge (white 14% fading
 - Minutes numeral 40% of lead, units 20% (20..30sp). Font scale is capped at 1.1 inside the card.
 - The same function formats comparison values (`formatDuration`): 1,284h, never 1284h 30m.
 
-## Under the numerals
-- **Comparison** when a previous window with listening exists: two bars on one scale. Yellow is this period with its percent change, grey is the comparison window (same elapsed days when the period is still running, and it says "Same days of October").
-- **Facts** otherwise (All time, first period): plays, tracks, average per day (or per active day).
-- **Sentence:** difference against the comparison, then the own-history rank ("Your 2nd best start to a month of 14"), falling back to a human-scale equivalent (albums, days, years of nonstop music).
+## Structure (v2, 0.16.1)
+1. **Eyebrow row:** "LISTENING TIME . NOVEMBER" left, **delta pill** right (yellow tint when up, quiet grey when down, since listening less is not an error).
+2. **Numerals** (rules above).
+3. **Comparison track:** ONE track. Yellow fill is this period, a white tick marks where the comparison window ended up on the same scale (8% headroom). Fill past the tick means ahead. Legend below: yellow square with value and period name, white tick with value and comparison name.
+4. **Facts** instead of the track when there is nothing to compare against (All time, first period): plays, tracks, per day.
+5. **Story line:** one line that adds meaning, never repeats the card: own-history rank, else the plain difference, else a human-scale equivalent.
+
+## Height changes
+The card sizes itself to its content (animateContentSize, 260ms decelerate, applied before clip and padding), so switching between comparison and facts, or between a one-line and two-line story, eases instead of jumping, and the cards below glide with it.
 
 ## Motion and access
 Card enters once. Count-up 1200ms, comparison bars fill after it, reduced motion snaps to final. TalkBack reads "Listening time, November: 41 hours 12 minutes. ..." as one element.
