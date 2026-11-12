@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Share images are written here just before the share sheet opens. -->
+    <cache-path name="share" path="share/" />
+</paths>

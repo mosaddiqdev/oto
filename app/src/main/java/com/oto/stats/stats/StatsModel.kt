@@ -1,6 +1,7 @@
 package com.oto.stats.stats
 
 import com.oto.stats.data.AppShareRow
+import com.oto.stats.data.DayTotal
 import com.oto.stats.data.Headline
 import com.oto.stats.data.HourBucket
 import com.oto.stats.data.ListeningDao
@@ -62,7 +63,39 @@ data class StatsData(
     val mostSkipped: TrackCount?,
     val activeDaysInPeriod: Int,
     val streaks: StatsMath.Streaks,
+    /** Per local day totals, for the calendar. */
+    val daily: List<DayTotal>,
+    val moments: Moments,
+    /** The days the calendar poster covers (inclusive) and which day is today. */
+    val heatStart: LocalDate,
+    val heatEnd: LocalDate,
+    val today: LocalDate,
 )
+
+/** The few things worth saying about a period, each backed by a number. */
+data class Moments(
+    val personality: Personality,
+    val equivalent: String,
+    /** Cover keys of the top tracks by time, used to colour and fill the hero poster. */
+    val heroCovers: List<String>,
+    val artist: ArtistMoment?,
+    val onRepeat: RepeatMoment?,
+    val explorer: ExplorerMoment?,
+    val longestDay: DayTotal?,
+)
+
+data class ArtistMoment(
+    val name: String,
+    val playedMs: Long,
+    val percent: Int,
+    val plays: Int,
+    val trackCount: Int,
+    val topTrack: TopTrackRow?,
+)
+
+data class RepeatMoment(val track: TopTrackRow, val days: Int)
+
+data class ExplorerMoment(val newTracks: Int, val uniqueTracks: Int, val percent: Int)
 
 data class StatsUiState(
     val selection: StatsSelection = StatsSelection(),
@@ -190,6 +223,13 @@ class StatsModel(
 
         val streaks = StatsMath.streaks(dao.activeDays(), today.toEpochDay())
 
+        val moments = buildMoments(
+            startMs, endMs, kind = sel.kind, headline = headline, unknownKey = unknownKey,
+            hours = hours, replays = dao.replayCount(startMs, endMs), daily = daily,
+            heroTracks = dao.topTracks(startMs, endMs, true, 3),
+            firstEverMs = firstMs,
+        )
+
         val data = StatsData(
             headline = headline,
             uniqueArtists = dao.uniqueArtists(startMs, endMs, unknownKey),
@@ -209,7 +249,69 @@ class StatsModel(
             mostSkipped = if (enough) dao.mostSkipped(startMs, endMs) else null,
             activeDaysInPeriod = activeInPeriod,
             streaks = streaks,
+            daily = daily,
+            moments = moments,
+            heatStart = if (sel.kind == PeriodKind.ALL) today.minusMonths(11).withDayOfMonth(1) else period.range.start,
+            heatEnd = if (sel.kind == PeriodKind.ALL) today else period.range.endExclusive.minusDays(1),
+            today = today,
         )
         return base.copy(content = StatsUiState.Content.Ready(data))
+    }
+
+    private suspend fun buildMoments(
+        startMs: Long,
+        endMs: Long,
+        kind: PeriodKind,
+        headline: Headline,
+        unknownKey: String,
+        hours: List<Long>?,
+        replays: Int,
+        daily: List<DayTotal>,
+        heroTracks: List<TopTrackRow>,
+        firstEverMs: Long,
+    ): Moments {
+        val leader = dao.topArtists(startMs, endMs, true, unknownKey, 1).firstOrNull()
+        val artist = leader?.let {
+            ArtistMoment(
+                name = it.name,
+                playedMs = it.playedMs,
+                percent = (it.playedMs * 100 / headline.playedMs.coerceAtLeast(1L)).toInt(),
+                plays = it.plays,
+                trackCount = dao.artistTrackCount(it.artistId, startMs, endMs),
+                topTrack = dao.artistTopTrack(it.artistId, startMs, endMs),
+            )
+        }
+
+        val repeatTrack = dao.topTracks(startMs, endMs, false, 1).firstOrNull()?.takeIf { it.plays >= 3 }
+        val onRepeat = repeatTrack?.let { RepeatMoment(it, dao.trackActiveDays(it.trackId, startMs, endMs)) }
+
+        // "New to you" is meaningless when the period starts at the very beginning of tracking.
+        val explorer = if (kind == PeriodKind.ALL || startMs <= firstEverMs) null else {
+            val fresh = dao.newTrackCount(startMs, endMs)
+            if (headline.uniqueTracks > 0) {
+                ExplorerMoment(fresh, headline.uniqueTracks, fresh * 100 / headline.uniqueTracks)
+            } else null
+        }
+
+        val personality = Insights.personality(
+            PersonalityInput(
+                plays = headline.plays,
+                uniqueTracks = headline.uniqueTracks,
+                replays = replays,
+                skips = headline.skips,
+                hours = hours,
+                topArtistPercent = artist?.percent ?: 0,
+                newTrackPercent = explorer?.percent,
+            ),
+        )
+        return Moments(
+            personality = personality,
+            equivalent = Insights.equivalent(headline.playedMs),
+            heroCovers = heroTracks.map { it.identityKey },
+            artist = artist,
+            onRepeat = onRepeat,
+            explorer = explorer,
+            longestDay = daily.maxByOrNull { it.playedMs },
+        )
     }
 }

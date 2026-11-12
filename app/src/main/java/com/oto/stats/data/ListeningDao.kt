@@ -391,4 +391,53 @@ abstract class ListeningDao {
         """,
     )
     abstract suspend fun mostSkipped(startMs: Long, endMs: Long): TrackCount?
+
+    /** How many different tracks of one artist were played in the range. */
+    @Query(
+        """
+        SELECT COUNT(DISTINCT e.trackId)
+        FROM listening_events e
+        JOIN track_artists ta ON ta.trackId = e.trackId
+        WHERE ta.artistId = :artistId AND e.startedAt >= :startMs AND e.startedAt < :endMs
+        """,
+    )
+    abstract suspend fun artistTrackCount(artistId: Long, startMs: Long, endMs: Long): Int
+
+    /** The most played track of one artist in the range; its cover stands in for the artist. */
+    @Query(
+        """
+        SELECT t.id AS trackId, t.title AS title, t.artistText AS artist, t.identityKey AS identityKey,
+               COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
+        FROM listening_events e
+        JOIN tracks t ON t.id = e.trackId
+        JOIN track_artists ta ON ta.trackId = t.id
+        WHERE ta.artistId = :artistId AND e.startedAt >= :startMs AND e.startedAt < :endMs
+        GROUP BY t.id
+        ORDER BY plays DESC, playedMs DESC
+        LIMIT 1
+        """,
+    )
+    abstract suspend fun artistTopTrack(artistId: Long, startMs: Long, endMs: Long): TopTrackRow?
+
+    /** On how many different local days a track was played. */
+    @Query(
+        """
+        SELECT COUNT(DISTINCT ((startedAt + tzOffsetMinutes * 60000) / 86400000))
+        FROM listening_events
+        WHERE trackId = :trackId AND startedAt >= :startMs AND startedAt < :endMs
+        """,
+    )
+    abstract suspend fun trackActiveDays(trackId: Long, startMs: Long, endMs: Long): Int
+
+    /** Tracks whose very first play was inside the range, i.e. new to the listener. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM (
+            SELECT trackId FROM listening_events
+            GROUP BY trackId
+            HAVING MIN(startedAt) >= :startMs AND MIN(startedAt) < :endMs
+        )
+        """,
+    )
+    abstract suspend fun newTrackCount(startMs: Long, endMs: Long): Int
 }

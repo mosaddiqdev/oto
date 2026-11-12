@@ -49,8 +49,15 @@ fun StatsScreen(model: StatsModel, artStore: ArtStore, headerProgress: MutableFl
 
 private fun LazyListScope.readySections(d: StatsData, ui: StatsUiState, model: StatsModel, artStore: ArtStore) {
     val byTime = ui.selection.byTime
+    val label = ui.periodLabel
+    item { HeroPoster(d, label, artStore) }
     item { HeroCard(d) }
-    item { ActivityCard(d, periodKey = ui.periodLabel) }
+    item { ActivityCard(d, periodKey = label) }
+    item { ArtistPoster(d, label, artStore) }
+    item { RepeatPoster(d, label, artStore) }
+    item { ClockPoster(d, label, artStore) }
+    item { CalendarPoster(d, ui.selection.kind, label, artStore) }
+    item { ExplorerPoster(d, label, artStore) }
     item {
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Most played", style = MaterialTheme.typography.headlineSmall, color = OtoColors.TextPrimary, modifier = Modifier.weight(1f))
@@ -68,10 +75,8 @@ private fun LazyListScope.readySections(d: StatsData, ui: StatsUiState, model: S
     if (d.topAlbums.isNotEmpty()) {
         item { RankedCard("Albums", d.topAlbums.map { RankedItem(it.album, it.artist, it.plays, it.playedMs, it.identityKey) }, byTime, artStore) }
     }
-    if (d.hours != null && d.weekdays != null) {
-        item { PatternsCard(d.hours, d.weekdays) }
-    } else {
-        item { Note("Patterns need a little more listening", "Hour and weekday patterns appear after about 3 days and 10 plays.") }
+    if (d.hours == null) {
+        item { Note("Patterns need a little more listening", "Your hour and weekday patterns appear after about 3 days and 10 plays.") }
     }
     item { HabitsCard(d) }
     if (d.apps.size > 1) item { AppsCard(d) }

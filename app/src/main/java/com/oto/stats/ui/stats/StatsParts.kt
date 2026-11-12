@@ -198,13 +198,12 @@ fun DeltaPill(delta: StatsMath.Delta?, suffix: String) {
 @Composable
 fun HeroCard(d: StatsData) {
     OtoCard {
-        SectionLabel("Listening time")
-        DurationText(d.headline.playedMs, OtoNumbers.Hero, unitSize = 24, modifier = Modifier.padding(top = 6.dp))
-        Row(Modifier.padding(top = 10.dp)) {
-            DeltaPill(
-                StatsMath.delta(d.headline.playedMs, d.previous?.playedMs ?: 0),
-                if (d.comparisonPartial) " vs same days before" else " vs before",
-            )
+        SectionLabel("The numbers")
+        val timeDelta = StatsMath.delta(d.headline.playedMs, d.previous?.playedMs ?: 0)
+        if (timeDelta != null) {
+            Row(Modifier.padding(top = 10.dp)) {
+                DeltaPill(timeDelta, if (d.comparisonPartial) " time vs same days before" else " time vs before")
+            }
         }
         Box(Modifier.padding(vertical = 18.dp).fillMaxWidth().height(1.dp).background(OtoColors.Hairline))
         Row(Modifier.fillMaxWidth()) {
