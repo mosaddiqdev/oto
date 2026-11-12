@@ -105,7 +105,7 @@ Each chart container has a spoken summary ("Listening time this month: 41 hours,
 1. Period control into the glass header (0.15.3: done, compact bar grows in the glass as the in-page control scrolls away; the title becomes the period name).
 2. Hero (0.16.0: built, see docs/STATS_HERO.md).
 3. Most played (0.17.0: card built, see docs/STATS_MOST_PLAYED.md), then its full list.
-4. Your days.
+4. Your days (0.18.0: built, see docs/STATS_DAYS.md).
 5. Discovery.
 6. Your hour.
 7. Showing up.

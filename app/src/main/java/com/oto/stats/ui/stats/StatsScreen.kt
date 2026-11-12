@@ -84,6 +84,13 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
             MostPlayedCard(d, ui.selection.byTime, model::setByTime, tab, { tab = it }, artStore, photos, ui.periodLabel + ui.selection.kind.name)
         }
     }
+    daysSentence(d.bars)?.let { sentence ->
+        item(key = "days") {
+            StatsSection("Your days", sentence = sentence, modifier = Modifier.cardEnter(2, loaded)) {
+                DaysCard(d, ui.periodLabel + ui.selection.kind.name)
+            }
+        }
+    }
 }
 
 @Composable
