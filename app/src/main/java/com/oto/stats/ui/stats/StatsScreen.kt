@@ -24,8 +24,8 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /*
- * The Stats tab. Structure and design: docs/STATS_DESIGN.md.
- * One yellow hero, then one question per section, then the trust line.
+ * The Stats tab. Structure and design: docs/STATS.md.
+ * Period control, then one card per question, then the trust line.
  */
 
 @Composable
@@ -50,46 +50,11 @@ fun StatsScreen(model: StatsModel, artStore: ArtStore, headerProgress: MutableFl
     }
 }
 
+/** Cards are rebuilt one at a time, in the order set out in docs/STATS.md. Nothing is drawn here until its turn. */
+@Suppress("UNUSED_PARAMETER")
 private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsModel, artStore: ArtStore, loaded: Boolean) {
-    val kind = ui.selection.kind
-    val key = ui.periodLabel + kind.name
-
-    item(key = "hero") {
-        HeroCard(d, ui.periodLabel, kind, Modifier.cardEnter(0, loaded))
-    }
-    item(key = "days") {
-        StatsSection("Your days", sentence = daysSentence(d.bars), modifier = Modifier.cardEnter(1, loaded)) {
-            DaysCard(d, key, kind)
-        }
-    }
-    item(key = "most") {
-        StatsSection("Most played", modifier = Modifier.cardEnter(2, loaded)) {
-            MostPlayedCard(d, ui.selection.byTime, model::setByTime, artStore, key)
-        }
-    }
-    if (d.hours != null) {
-        item(key = "hour") {
-            StatsSection("Your hour", sentence = hourSentence(d), modifier = Modifier.cardEnter(3, loaded)) {
-                HourCard(d, key)
-            }
-        }
-    }
-    calendarSentence(d, kind)?.let { sentence ->
-        item(key = "calendar") {
-            StatsSection("Showing up", sentence = sentence, modifier = Modifier.cardEnter(4, loaded)) {
-                CalendarCard(d, kind)
-            }
-        }
-    }
-    item(key = "listener") {
-        StatsSection("How you listen", modifier = Modifier.cardEnter(5, loaded)) {
-            ListenerCard(d, key)
-        }
-    }
-    if (d.hours == null) {
-        item(key = "lowdata") {
-            Note("More patterns soon", "Your hour and listening habits appear after about 3 days and 10 plays.")
-        }
+    item(key = "rebuild") {
+        Note("Rebuilding, one card at a time", "Next up: the hero card. Order and rules are in docs/STATS.md.")
     }
 }
 
