@@ -67,6 +67,10 @@ data class StatsData(
     val daily: List<DayTotal>,
     val moments: Moments,
     /** The days the calendar poster covers (inclusive) and which day is today. */
+    /** "October", "the week before", "2025": what the comparison window is called. Null for All time. */
+    val comparisonName: String?,
+    /** Where this period ranks among the user's own periods of the same kind. */
+    val rank: PeriodRank.Result?,
     val heatStart: LocalDate,
     val heatEnd: LocalDate,
     val today: LocalDate,
@@ -251,6 +255,8 @@ class StatsModel(
             streaks = streaks,
             daily = daily,
             moments = moments,
+            comparisonName = comparisonName(period, sel.kind, ws),
+            rank = PeriodRank.compute(dao.dailyInRange(0L, Long.MAX_VALUE), period, today, ws),
             heatStart = if (sel.kind == PeriodKind.ALL) today.minusMonths(11).withDayOfMonth(1) else period.range.start,
             heatEnd = if (sel.kind == PeriodKind.ALL) today else period.range.endExclusive.minusDays(1),
             today = today,
@@ -313,5 +319,13 @@ class StatsModel(
             explorer = explorer,
             longestDay = daily.maxByOrNull { it.playedMs },
         )
+    }
+
+    private fun comparisonName(period: StatsPeriod, kind: PeriodKind, ws: DayOfWeek): String? = when (kind) {
+        PeriodKind.WEEK -> "the week before"
+        PeriodKind.MONTH -> period.previous(ws).range.start.month
+            .getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault())
+        PeriodKind.YEAR -> period.previous(ws).range.start.year.toString()
+        PeriodKind.ALL -> null
     }
 }

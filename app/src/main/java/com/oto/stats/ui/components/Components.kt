@@ -62,6 +62,7 @@ fun TrackHeaderProgress(state: LazyListState, target: MutableFloatState, fadeDp:
 fun ScreenColumn(
     headerProgress: MutableFloatState,
     modifier: Modifier = Modifier,
+    spacing: Dp = 16.dp,
     content: LazyListScope.() -> Unit,
 ) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + HEADER_CONTENT_DP.dp
@@ -73,7 +74,7 @@ fun ScreenColumn(
             .fillMaxSize()
             .background(OtoColors.Canvas),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = OVERSCAN_DP.dp + top + 8.dp, bottom = 210.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(spacing),
         content = content,
     )
 }
