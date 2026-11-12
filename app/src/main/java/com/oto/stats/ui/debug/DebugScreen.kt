@@ -83,6 +83,7 @@ fun DebugScreen(
     val foreground by TrackingStatus.foreground.collectAsState()
     val nowPlaying by TrackingStatus.nowPlaying.collectAsState()
     val trackAll by container.prefs.trackAllApps.collectAsState()
+    val fetchArt by container.prefs.fetchArt.collectAsState()
     val totals by remember(container) { container.repository.totals() }
         .collectAsState(initial = Totals(0, 0L, 0))
     val events by remember(container) { container.repository.recentEvents(50) }
@@ -232,6 +233,22 @@ fun DebugScreen(
                         )
                     }
                     Switch(checked = trackAll, onCheckedChange = { container.prefs.setTrackAllApps(it) })
+                }
+            }
+        }
+
+        item {
+            DebugCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Fetch artist photos", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            "Looks up artist photos on Deezer for the artists you see in Stats. Only the artist name is sent, only on Wi-Fi, and nothing else leaves your phone. Off keeps Oto fully offline.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OtoColors.TextTertiary,
+                        )
+                    }
+                    Switch(checked = fetchArt, onCheckedChange = { container.prefs.setFetchArt(it) })
                 }
             }
         }

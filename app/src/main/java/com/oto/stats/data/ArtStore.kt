@@ -65,6 +65,18 @@ class ArtStore(context: Context) {
         }
     }
 
+    /** True when a lookup for [key] failed recently, so we do not ask the network again every launch. */
+    fun recentlyMissed(key: String, days: Int = 14): Boolean {
+        val f = File(fileFor(key).path + ".none")
+        return f.exists() && System.currentTimeMillis() - f.lastModified() < days * 86_400_000L
+    }
+
+    fun markMissed(key: String) {
+        runCatching { File(fileFor(key).path + ".none").apply { writeText("") ; setLastModified(System.currentTimeMillis()) } }
+    }
+
+    fun hasFile(key: String): Boolean = fileFor(key).exists()
+
     private companion object {
         const val THUMB_PX = 300
     }

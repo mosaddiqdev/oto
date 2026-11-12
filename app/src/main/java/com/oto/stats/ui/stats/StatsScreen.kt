@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.oto.stats.data.ArtStore
+import com.oto.stats.data.ArtistPhotos
 import com.oto.stats.stats.StatsData
 import com.oto.stats.stats.StatsModel
 import com.oto.stats.stats.StatsUiState
@@ -36,7 +37,7 @@ import java.util.Locale
  */
 
 @Composable
-fun StatsScreen(model: StatsModel, artStore: ArtStore, headerProgress: MutableFloatState, periodCollapse: MutableFloatState) {
+fun StatsScreen(model: StatsModel, artStore: ArtStore, photos: ArtistPhotos, headerProgress: MutableFloatState, periodCollapse: MutableFloatState) {
     val ui by model.state.collectAsState()
     // Entrances play once when the tab first shows data, not on every scroll back.
     val loaded = ui.content is StatsUiState.Content.Ready
@@ -61,7 +62,7 @@ fun StatsScreen(model: StatsModel, artStore: ArtStore, headerProgress: MutableFl
             StatsUiState.Content.EmptyPeriod -> item {
                 Note("No listening in ${ui.periodLabel}", "Step back to an earlier period, or pick another range.")
             }
-            is StatsUiState.Content.Ready -> ready(c.data, ui, model, artStore, loaded)
+            is StatsUiState.Content.Ready -> ready(c.data, ui, model, artStore, photos, loaded)
         }
         item(key = "trust") { TrustLine(ui) }
     }
@@ -69,7 +70,7 @@ fun StatsScreen(model: StatsModel, artStore: ArtStore, headerProgress: MutableFl
 
 /** Cards are rebuilt one at a time, in the order set out in docs/STATS.md. Nothing is drawn here until its turn. */
 @Suppress("UNUSED_PARAMETER")
-private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsModel, artStore: ArtStore, loaded: Boolean) {
+private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsModel, artStore: ArtStore, photos: ArtistPhotos, loaded: Boolean) {
     item(key = "hero") {
         HeroCard(d, ui.periodLabel, ui.selection.kind, Modifier.cardEnter(0, loaded))
     }
@@ -80,7 +81,7 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
             sentence = mostPlayedSentence(d, tab, ui.selection.byTime),
             modifier = Modifier.cardEnter(1, loaded),
         ) {
-            MostPlayedCard(d, ui.selection.byTime, model::setByTime, tab, { tab = it }, artStore, ui.periodLabel + ui.selection.kind.name)
+            MostPlayedCard(d, ui.selection.byTime, model::setByTime, tab, { tab = it }, artStore, photos, ui.periodLabel + ui.selection.kind.name)
         }
     }
 }

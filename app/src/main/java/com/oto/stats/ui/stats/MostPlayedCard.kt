@@ -22,6 +22,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import com.oto.stats.data.ArtistPhotos
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -51,12 +59,12 @@ import com.oto.stats.ui.theme.OtoMotion
  */
 
 /** One row of any of the three lists, reduced to what the card draws. */
-private data class Entry(val title: String, val subtitle: String, val coverKey: String?, val plays: Int, val ms: Long)
+private data class Entry(val title: String, val subtitle: String, val coverKey: String?, val plays: Int, val ms: Long, val artistId: Long? = null)
 
 private enum class Tab(val label: String) { Artists("Artists"), Tracks("Tracks"), Albums("Albums") }
 
 private fun entries(d: StatsData, tab: Tab): List<Entry> = when (tab) {
-    Tab.Artists -> d.topArtists.map { Entry(it.name, "", it.identityKey, it.plays, it.playedMs) }
+    Tab.Artists -> d.topArtists.map { Entry(it.name, "", it.identityKey, it.plays, it.playedMs, it.artistId) }
     Tab.Tracks -> d.topTracks.map { Entry(it.title, it.artist, it.identityKey, it.plays, it.playedMs) }
     Tab.Albums -> d.topAlbums.map { Entry(it.album, it.artist, it.identityKey, it.plays, it.playedMs) }
 }
@@ -88,6 +96,7 @@ fun MostPlayedCard(
     tabIndex: Int,
     onTab: (Int) -> Unit,
     artStore: ArtStore,
+    photos: ArtistPhotos,
     key: String,
     modifier: Modifier = Modifier,
 ) {
@@ -113,9 +122,9 @@ fun MostPlayedCard(
             } else {
                 Column(Modifier.padding(top = 16.dp)) {
                     val top = value(list.first(), time).coerceAtLeast(1L).toFloat()
-                    Featured(list.first(), tab, time, artStore, "$key/$t/$time")
+                    Featured(list.first(), tab, time, artStore, photos, "$key/$t/$time")
                     list.drop(1).forEachIndexed { i, e ->
-                        ListRow(e, rank = i + 2, tab = tab, byTime = time, fraction = (value(e, time) / top).coerceIn(0f, 1f), artStore = artStore, key = "$key/$t/$time", index = i + 1)
+                        ListRow(e, rank = i + 2, tab = tab, byTime = time, fraction = (value(e, time) / top).coerceIn(0f, 1f), artStore = artStore, photos = photos, key = "$key/$t/$time", index = i + 1)
                     }
                 }
             }
@@ -145,11 +154,11 @@ private fun MetricToggle(byTime: Boolean, onByTime: (Boolean) -> Unit, modifier:
 }
 
 @Composable
-private fun Featured(e: Entry, tab: Tab, byTime: Boolean, artStore: ArtStore, key: String) {
+private fun Featured(e: Entry, tab: Tab, byTime: Boolean, artStore: ArtStore, photos: ArtistPhotos, key: String) {
     val fraction = rememberBar(1f, key, 0)
     Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = spoken(e, 1, tab) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Cover(e, tab, 88, artStore)
+            Cover(e, tab, 88, artStore, photos)
             Column(Modifier.padding(start = 16.dp).weight(1f)) {
                 Text("No. 1", style = MaterialTheme.typography.labelMedium, color = OtoColors.Accent)
                 Text(
@@ -185,7 +194,7 @@ private fun Featured(e: Entry, tab: Tab, byTime: Boolean, artStore: ArtStore, ke
 }
 
 @Composable
-private fun ListRow(e: Entry, rank: Int, tab: Tab, byTime: Boolean, fraction: Float, artStore: ArtStore, key: String, index: Int) {
+private fun ListRow(e: Entry, rank: Int, tab: Tab, byTime: Boolean, fraction: Float, artStore: ArtStore, photos: ArtistPhotos, key: String, index: Int) {
     val f = rememberBar(fraction, key, index)
     Column(
         Modifier
@@ -200,7 +209,7 @@ private fun ListRow(e: Entry, rank: Int, tab: Tab, byTime: Boolean, fraction: Fl
                 color = OtoColors.TextTertiary,
                 modifier = Modifier.width(20.dp),
             )
-            Cover(e, tab, 44, artStore)
+            Cover(e, tab, 44, artStore, photos)
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                 Text(e.title, style = MaterialTheme.typography.titleSmall, color = OtoColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (e.subtitle.isNotEmpty()) {
@@ -220,14 +229,33 @@ private fun ListRow(e: Entry, rank: Int, tab: Tab, byTime: Boolean, fraction: Fl
 }
 
 @Composable
-private fun Cover(e: Entry, tab: Tab, size: Int, artStore: ArtStore) {
-    TrackCover(
-        identityKey = e.coverKey ?: e.title,
-        title = e.title,
-        artStore = artStore,
-        size = size.dp,
-        circle = tab == Tab.Artists,
-    )
+private fun Cover(e: Entry, tab: Tab, size: Int, artStore: ArtStore, photos: ArtistPhotos) {
+    val fallback = @Composable {
+        TrackCover(identityKey = e.coverKey ?: e.title, title = e.title, artStore = artStore, size = size.dp, circle = tab == Tab.Artists)
+    }
+    val id = e.artistId
+    if (tab != Tab.Artists || id == null) {
+        fallback()
+        return
+    }
+    // The artist's photo when we have one (fetched on demand), meanwhile the cover of their top track.
+    val key = photos.keyFor(id)
+    val photo by produceState<ImageBitmap?>(artStore.peek(key), key) {
+        value = artStore.load(key) ?: if (photos.ensure(id, e.title)) artStore.load(key) else null
+    }
+    val shown = photo
+    Box(Modifier.size(size.dp)) {
+        fallback()
+        if (shown != null) {
+            val alpha by animateFloatAsState(1f, tween(300), label = "photo")
+            androidx.compose.foundation.Image(
+                bitmap = shown,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.size(size.dp).clip(CircleShape).graphicsLayer { this.alpha = alpha },
+            )
+        }
+    }
 }
 
 /** Grows once from the left, staggered by row, clamped so a spring never paints past the track. */

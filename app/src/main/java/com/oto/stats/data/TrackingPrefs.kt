@@ -12,6 +12,15 @@ class TrackingPrefs(context: Context) {
     private val _trackAllApps = MutableStateFlow(prefs.getBoolean(KEY_TRACK_ALL, false))
     val trackAllApps: StateFlow<Boolean> = _trackAllApps
 
+    private val _fetchArt = MutableStateFlow(prefs.getBoolean(KEY_FETCH_ART, true))
+    /** Fetch artist photos from Deezer (sends the artist name only). On Wi-Fi or any unmetered network. */
+    val fetchArt: StateFlow<Boolean> = _fetchArt
+
+    fun setFetchArt(value: Boolean) {
+        prefs.edit().putBoolean(KEY_FETCH_ART, value).apply()
+        _fetchArt.value = value
+    }
+
     /** Whether the notification permission prompt was already shown once. */
     var notificationsAsked: Boolean
         get() = prefs.getBoolean(KEY_NOTIF_ASKED, false)
@@ -38,6 +47,7 @@ class TrackingPrefs(context: Context) {
 
     private companion object {
         const val KEY_TRACK_ALL = "track_all_apps"
+        const val KEY_FETCH_ART = "fetch_art"
         const val KEY_NOTIF_ASKED = "notifications_asked"
     }
 }
