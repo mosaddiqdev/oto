@@ -308,6 +308,10 @@ class StatsModel(
                 hours = hours,
                 topArtistPercent = artist?.percent ?: 0,
                 newTrackPercent = explorer?.percent,
+                topArtistName = artist?.name,
+                repeatedTitle = onRepeat?.track?.title,
+                skippedTitle = if (headline.plays >= 10) dao.mostSkipped(startMs, endMs)?.title else null,
+                newTracks = explorer?.newTracks,
             ),
         )
         return Moments(

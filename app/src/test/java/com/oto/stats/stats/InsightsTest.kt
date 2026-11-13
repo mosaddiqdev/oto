@@ -50,4 +50,18 @@ class InsightsTest {
         assertNull(Insights.oneIn(3))
         assertNull(Insights.oneIn(80))
     }
+
+    @Test fun evidenceLinesNameTheArtistAndTrackWhenKnown() {
+        val loyal = Insights.personality(base(artist = 60).copy(topArtistName = "NF"))
+        assertEquals("Loyalist", loyal.name)
+        assertEquals("60% of your listening time went to NF.", loyal.line)
+        val repeat = Insights.personality(base(replays = 15).copy(repeatedTitle = "Mansion"))
+        org.junit.Assert.assertTrue(repeat.line.contains("Mansion"))
+        val picky = Insights.personality(base(skips = 35).copy(skippedTitle = "Intro"))
+        org.junit.Assert.assertTrue(picky.line.contains("Intro"))
+        val explorer = Insights.personality(base(fresh = 60).copy(newTracks = 18))
+        org.junit.Assert.assertTrue(explorer.line.contains("18 new tracks"))
+        val steady = Insights.personality(base(artist = 20).copy(topArtistName = "NF"))
+        org.junit.Assert.assertTrue(steady.line.contains("NF"))
+    }
 }

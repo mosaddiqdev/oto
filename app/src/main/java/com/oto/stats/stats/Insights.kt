@@ -23,6 +23,11 @@ data class PersonalityInput(
     val topArtistPercent: Int,
     /** Share of tracks that were first heard in this period, 0..100; null when meaningless. */
     val newTrackPercent: Int?,
+    /** Names for the evidence line, so it can say who or what instead of "a single artist". All optional. */
+    val topArtistName: String? = null,
+    val repeatedTitle: String? = null,
+    val skippedTitle: String? = null,
+    val newTracks: Int? = null,
 )
 
 /** Pure copy and rules behind the Stats "moments". Every sentence is backed by a computed number. */
@@ -45,11 +50,26 @@ object Insights {
         return when {
             night >= 30 -> Personality("Night Owl", "$night% of your listening happens after midnight.")
             morning >= 35 -> Personality("Early Bird", "$morning% of it happens before noon.")
-            i.topArtistPercent >= 35 -> Personality("Loyalist", "${i.topArtistPercent}% of your time went to a single artist.")
-            replayRate >= 12 -> Personality("On Repeat", "You came back to the same songs $replayRate% of the time.")
-            (i.newTrackPercent ?: 0) >= 50 -> Personality("Explorer", "${i.newTrackPercent}% of what you played was new to you.")
-            skipRate >= 30 -> Personality("Picky", "You skipped $skipRate% of what came on.")
-            else -> Personality("Steady Listener", "Balanced, consistent, at your own pace.")
+            i.topArtistPercent >= 35 -> Personality(
+                "Loyalist",
+                if (i.topArtistName != null) "${i.topArtistPercent}% of your listening time went to ${i.topArtistName}." else "${i.topArtistPercent}% of your time went to a single artist.",
+            )
+            replayRate >= 12 -> Personality(
+                "On Repeat",
+                "You came back to the same songs $replayRate% of the time" + (i.repeatedTitle?.let { ", most of all \u201C$it\u201D." } ?: "."),
+            )
+            (i.newTrackPercent ?: 0) >= 50 -> Personality(
+                "Explorer",
+                if (i.newTracks != null) "${i.newTrackPercent}% of what you played was new to you: ${i.newTracks} new tracks." else "${i.newTrackPercent}% of what you played was new to you.",
+            )
+            skipRate >= 30 -> Personality(
+                "Picky",
+                "You skipped $skipRate% of what came on" + (i.skippedTitle?.let { ", most often \u201C$it\u201D." } ?: "."),
+            )
+            else -> Personality(
+                "Steady Listener",
+                if (i.topArtistName != null && i.topArtistPercent > 0) "No habit dominates. Your top artist, ${i.topArtistName}, took ${i.topArtistPercent}% of your time." else "No single habit dominates your listening.",
+            )
         }
     }
 

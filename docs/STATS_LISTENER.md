@@ -13,3 +13,6 @@
 - **Motion:** each dot glides from the middle to its place, one after another, ease-out, no overshoot, once per load. Reduced motion jumps to final.
 - **TalkBack:** one summary with the label, the rule and the four positions.
 - No predictions, no "age", nothing that cannot be traced to a number.
+
+## Evidence lines name names (0.21.1)
+Where we know who or what, the line says it instead of a generic phrase: Loyalist "62% of your listening time went to NF.", On Repeat "...most of all "Mansion".", Picky "...most often "Intro".", Explorer "...: 18 new tracks.", Steady Listener "No habit dominates. Your top artist, NF, took 20% of your time." Falls back to the generic wording only when the name is not available.
