@@ -183,9 +183,9 @@ private fun Glyph(name: String, modifier: Modifier) {
                 val t = Offset((-sin(a)).toFloat(), cos(a).toFloat())
                 val n = Offset(cos(a).toFloat(), sin(a).toFloat())
                 val tri = Path().apply {
-                    moveTo((p + t * 6 * u).x, (p + t * 6 * u).y)
-                    lineTo((p + n * 5 * u).x, (p + n * 5 * u).y)
-                    lineTo((p - n * 5 * u).x, (p - n * 5 * u).y)
+                    moveTo((p + t * (6 * u)).x, (p + t * (6 * u)).y)
+                    lineTo((p + n * (5 * u)).x, (p + n * (5 * u)).y)
+                    lineTo((p - n * (5 * u)).x, (p - n * (5 * u)).y)
                     close()
                 }
                 drawPath(tri, ink)
