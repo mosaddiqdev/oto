@@ -71,7 +71,7 @@ private fun entries(d: StatsData, tab: Tab): List<Entry> = when (tab) {
 
 private fun value(e: Entry, byTime: Boolean) = if (byTime) e.ms else e.plays.toLong()
 
-private fun playsText(n: Int) = "${formatCount(n)} ${if (n == 1) "play" else "plays"}"
+internal fun playsText(n: Int) = "${formatCount(n)} ${if (n == 1) "play" else "plays"}"
 
 /** The one sentence above the card: what the leader is worth, as a share or a count. */
 fun mostPlayedSentence(d: StatsData, tabIndex: Int, byTime: Boolean): String? {

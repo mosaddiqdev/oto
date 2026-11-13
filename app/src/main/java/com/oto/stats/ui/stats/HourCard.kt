@@ -33,7 +33,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -196,13 +198,15 @@ fun HourCard(d: StatsData, key: String, modifier: Modifier = Modifier) {
                 close()
             }
             val reveal = intro.value
-            clipRect(left = 0f, top = 0f, right = w * reveal, bottom = ribbonH) {
+            // Everything inside the band is clipped to the band's own rounded shape, so nothing pokes out of a corner.
+            val band = Path().apply { addRoundRect(RoundRect(0f, 0f, w, ribbonH, CornerRadius(20.dp.toPx()))) }
+            clipPath(band) { clipRect(left = 0f, top = 0f, right = w * reveal, bottom = ribbonH) {
                 drawPath(area, Brush.verticalGradient(listOf(OtoColors.Accent.copy(alpha = 0.42f), OtoColors.Accent.copy(alpha = 0.0f)), startY = top, endY = ribbonH))
                 drawPath(
                     line, Brush.horizontalGradient(listOf(Color(0xFFC9A91C), OtoColors.Accent, Color(0xFFFFF4A8)), startX = 0f, endX = w),
                     style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
                 )
-            }
+            } }
             // The selected hour: a hairline, a halo and a lit dot, on the curve.
             val sx = px(selected)
             val sy = py(selected)

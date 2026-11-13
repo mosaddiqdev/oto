@@ -448,4 +448,40 @@ abstract class ListeningDao {
         """,
     )
     abstract suspend fun newTrackCount(startMs: Long, endMs: Long): Int
+
+    /** Your best finds: tracks whose very first play was in the range, ranked by how much you played them in it. */
+    @Query(
+        """
+        SELECT t.id AS trackId, t.title AS title, t.artistText AS artist, t.identityKey AS identityKey,
+               COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
+        FROM listening_events e
+        JOIN tracks t ON t.id = e.trackId
+        WHERE e.startedAt >= :startMs AND e.startedAt < :endMs
+          AND t.id IN (
+              SELECT trackId FROM listening_events
+              GROUP BY trackId
+              HAVING MIN(startedAt) >= :startMs AND MIN(startedAt) < :endMs
+          )
+        GROUP BY t.id
+        ORDER BY SUM(e.playedMs) DESC, COUNT(*) DESC, t.title
+        LIMIT :limit
+        """,
+    )
+    abstract suspend fun newTracksTop(startMs: Long, endMs: Long, limit: Int): List<TopTrackRow>
+
+    /** Artists you heard for the first time inside the range. Unknown Artist is left out. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM (
+            SELECT ta.artistId
+            FROM track_artists ta
+            JOIN artists a ON a.id = ta.artistId
+            JOIN listening_events e ON e.trackId = ta.trackId
+            WHERE a.normalizedName != :unknownKey
+            GROUP BY ta.artistId
+            HAVING MIN(e.startedAt) >= :startMs AND MIN(e.startedAt) < :endMs
+        )
+        """,
+    )
+    abstract suspend fun newArtistCount(startMs: Long, endMs: Long, unknownKey: String): Int
 }

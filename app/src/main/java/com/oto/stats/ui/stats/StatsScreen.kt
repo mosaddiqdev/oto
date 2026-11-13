@@ -92,6 +92,13 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
             }
         }
     }
+    discoverySentence(d)?.let { sentence ->
+        item(key = "discovery") {
+            StatsSection("Discovery", sentence = sentence, modifier = Modifier.cardEnter(3, loaded)) {
+                DiscoveryCard(d, artStore, ui.periodLabel + ui.selection.kind.name)
+            }
+        }
+    }
     hourSentence(d.hours, is24)?.let { sentence ->
         item(key = "hour") {
             StatsSection("Your hour", sentence = sentence, modifier = Modifier.cardEnter(3, loaded)) {

@@ -86,6 +86,17 @@ data class Moments(
     val onRepeat: RepeatMoment?,
     val explorer: ExplorerMoment?,
     val longestDay: DayTotal?,
+    /** New music this period; null when "new to you" is meaningless (All time, or the very start of tracking). */
+    val discovery: DiscoveryMoment? = null,
+)
+
+data class DiscoveryMoment(
+    val newTracks: Int,
+    val uniqueTracks: Int,
+    val newArtists: Int,
+    val replays: Int,
+    /** Best new tracks, most listened first. */
+    val finds: List<TopTrackRow>,
 )
 
 data class ArtistMoment(
@@ -299,6 +310,16 @@ class StatsModel(
             } else null
         }
 
+        val discovery = explorer?.let {
+            DiscoveryMoment(
+                newTracks = it.newTracks,
+                uniqueTracks = it.uniqueTracks,
+                newArtists = dao.newArtistCount(startMs, endMs, unknownKey),
+                replays = replays,
+                finds = if (it.newTracks > 0) dao.newTracksTop(startMs, endMs, 3) else emptyList(),
+            )
+        }
+
         val personality = Insights.personality(
             PersonalityInput(
                 plays = headline.plays,
@@ -322,6 +343,7 @@ class StatsModel(
             onRepeat = onRepeat,
             explorer = explorer,
             longestDay = daily.maxByOrNull { it.playedMs },
+            discovery = discovery,
         )
     }
 

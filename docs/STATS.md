@@ -106,7 +106,7 @@ Each chart container has a spoken summary ("Listening time this month: 41 hours,
 2. Hero (0.16.0: built, see docs/STATS_HERO.md).
 3. Most played (0.17.0: card built, see docs/STATS_MOST_PLAYED.md), then its full list.
 4. Your days (0.18.0: built, see docs/STATS_DAYS.md).
-5. Discovery.
+5. Discovery (0.22.0: built, see docs/STATS_DISCOVERY.md).
 6. Your hour (0.19.0: built, ribbon, see docs/STATS_HOUR.md).
 7. Showing up (0.20.0: built, beads and chains, see docs/STATS_SHOWING_UP.md).
 8. Records.

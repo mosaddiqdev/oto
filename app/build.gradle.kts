@@ -24,8 +24,8 @@ android {
         applicationId = "com.oto.stats"
         minSdk = 26
         targetSdk = 36
-        versionCode = 36
-        versionName = "0.21.2"
+        versionCode = 37
+        versionName = "0.22.0"
     }
 
     signingConfigs {
