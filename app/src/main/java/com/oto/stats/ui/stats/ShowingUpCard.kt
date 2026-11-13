@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -162,7 +164,7 @@ fun ShowingUpCard(d: StatsData, kind: PeriodKind, firstTracked: LocalDate?, key:
                     color = OtoColors.TextTertiary,
                 )
                 Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 10.dp)) {
-                    Text(active.toString(), style = giant(64f, -2.8).copy(brush = LitDigits, shadow = DigitGlow, fontFeatureSettings = "tnum"), modifier = Modifier.alignByBaseline())
+                    Text(active.toString(), style = giant(64f, -2.8).copy(brush = LitDigits, fontFeatureSettings = "tnum"), modifier = Modifier.alignByBaseline())
                     Text("of $elapsed", style = giant(22f, -0.3), color = OtoColors.TextTertiary, modifier = Modifier.alignByBaseline().padding(start = 8.dp))
                 }
             }
@@ -301,10 +303,10 @@ fun ShowingUpCard(d: StatsData, kind: PeriodKind, firstTracked: LocalDate?, key:
                     }
                 }
                 if (day.date == d.today) {
-                    drawCircle(Color.White.copy(alpha = 0.55f), g.dot / 2f + 3.dp.toPx(), center, style = Stroke(1.5.dp.toPx()))
+                    drawCircle(Color.White.copy(alpha = 0.55f), g.dot / 2f + 1.dp.toPx(), center, style = Stroke(1.25.dp.toPx()))
                 }
                 if (isSel) {
-                    drawCircle(Color.White, g.dot / 2f + 3.dp.toPx(), center, style = Stroke(2.dp.toPx()))
+                    drawCircle(Color.White, g.dot / 2f + 1.5.dp.toPx(), center, style = Stroke(1.75.dp.toPx()))
                 }
             }
         }
@@ -324,4 +326,27 @@ fun ShowingUpCard(d: StatsData, kind: PeriodKind, firstTracked: LocalDate?, key:
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawNumber(layout: androidx.compose.ui.text.TextLayoutResult, center: Offset, color: Color) {
     drawText(layout, color = color, topLeft = Offset(center.x - layout.size.width / 2f, center.y - layout.size.height / 2f))
+}
+
+/** A small flame for streaks, drawn as one path so it stays crisp at any size. */
+@Composable
+internal fun Flame(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        fun x(v: Float) = v * w
+        fun y(v: Float) = v * h
+        val path = Path().apply {
+            moveTo(x(0.52f), y(0.02f))
+            cubicTo(x(0.55f), y(0.25f), x(0.85f), y(0.38f), x(0.85f), y(0.68f))
+            cubicTo(x(0.85f), y(0.88f), x(0.70f), y(1.0f), x(0.50f), y(1.0f))
+            cubicTo(x(0.30f), y(1.0f), x(0.15f), y(0.88f), x(0.15f), y(0.68f))
+            cubicTo(x(0.15f), y(0.52f), x(0.25f), y(0.42f), x(0.32f), y(0.34f))
+            cubicTo(x(0.34f), y(0.46f), x(0.40f), y(0.52f), x(0.45f), y(0.52f))
+            cubicTo(x(0.42f), y(0.34f), x(0.45f), y(0.14f), x(0.52f), y(0.02f))
+            close()
+        }
+        drawPath(path, color)
+        drawCircle(OtoColors.Surface1, w * 0.12f, Offset(x(0.5f), y(0.78f)))
+    }
 }

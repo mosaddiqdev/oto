@@ -122,7 +122,7 @@ fun HourCard(d: StatsData, key: String, modifier: Modifier = Modifier) {
                 Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 10.dp)) {
                     Text(
                         lead,
-                        style = giant(76f, -3.4).copy(brush = LitDigits, shadow = DigitGlow, fontFeatureSettings = "tnum"),
+                        style = giant(76f, -3.4).copy(brush = LitDigits, fontFeatureSettings = "tnum"),
                         modifier = Modifier.alignByBaseline(),
                     )
                     Text(unit, style = giant(26f, -0.3), color = OtoColors.TextTertiary, modifier = Modifier.alignByBaseline().padding(start = 6.dp))

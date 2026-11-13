@@ -34,7 +34,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -63,8 +62,7 @@ import kotlin.math.abs
  */
 
 private val HeroBase = Color(0xFF151515)
-internal val LitDigits = Brush.verticalGradient(listOf(Color(0xFFFFF4A8), OtoColors.Accent, Color(0xFFC9A91C)))
-internal val DigitGlow = Shadow(OtoColors.Accent.copy(alpha = 0.30f), Offset.Zero, 38f)
+internal val LitDigits = Brush.verticalGradient(listOf(Color(0xFFF6E479), OtoColors.Accent, Color(0xFFDBBE2C)))
 private val Rim = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.14f), Color.White.copy(alpha = 0.04f)))
 
 internal fun giant(sp: Float, track: Double) = TextStyle(
@@ -194,7 +192,7 @@ private fun HeroNumerals(shown: Long, final: Long, modifier: Modifier = Modifier
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 lead,
-                style = giant(leadSp, -leadSp * 0.045.toDouble()).copy(brush = LitDigits, shadow = DigitGlow),
+                style = giant(leadSp, -leadSp * 0.045.toDouble()).copy(brush = LitDigits),
                 maxLines = 1,
                 modifier = Modifier.alignByBaseline(),
             )

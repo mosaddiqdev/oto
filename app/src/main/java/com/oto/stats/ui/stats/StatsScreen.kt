@@ -106,6 +106,13 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
             }
         }
     }
+    if (listenerSentence(d) != null) {
+        item(key = "listener") {
+            StatsSection("How you listen", sentence = null, modifier = Modifier.cardEnter(5, loaded)) {
+                ListenerCard(d, ui.periodLabel + ui.selection.kind.name)
+            }
+        }
+    }
 }
 
 @Composable

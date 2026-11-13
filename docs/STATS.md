@@ -110,9 +110,12 @@ Each chart container has a spoken summary ("Listening time this month: 41 hours,
 6. Your hour (0.19.0: built, ribbon, see docs/STATS_HOUR.md).
 7. Showing up (0.20.0: built, beads and chains, see docs/STATS_SHOWING_UP.md).
 8. Records.
-9. How you listen.
+9. How you listen (0.21.0: built, label with spectrums, see docs/STATS_LISTENER.md).
 10. Poster picker.
 11. Detail screens and doorways wired as each card lands.
 
 ## 11. Colour rule (decided)
 One accent, Tape Yellow, for emphasis in the data. Semantic colours (green, orange, red) only for status: tracking and permission state, errors. Never in the data itself: listening more or less is not good or bad, so up is yellow and down is quiet grey. Categories (such as apps) use steps of yellow or neutral greys with direct labels. Cover-derived colour only on exported posters.
+
+## 12. Numbers (decided 0.21.0)
+Numerals use a soft vertical yellow gradient only. No glow or shadow on any number. The hero's warm backdrop stays, it belongs to the card, not the digits.
