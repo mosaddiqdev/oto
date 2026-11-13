@@ -116,7 +116,7 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
     if (d.hours != null) recordsSentence(d)?.let { sentence ->
         item(key = "records") {
             StatsSection("Records", sentence = sentence, modifier = Modifier.cardEnter(5, loaded)) {
-                RecordsCard(d, ui.periodLabel + ui.selection.kind.name)
+                RecordsCard(d, ui.selection.kind, ui.trackedSince, ui.periodLabel + ui.selection.kind.name)
             }
         }
     }

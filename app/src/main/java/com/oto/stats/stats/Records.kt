@@ -15,6 +15,10 @@ data class Records(
     val mostPlaysDay: DayRecord?,
     val longestRun: RunRecord?,
     val mostReplayed: TrackCount?,
+    /** Your whole-history bests, so a card can show how far a window's record sits from them. */
+    val allTimeDayMs: Long = 0L,
+    val allTimePlays: Int = 0,
+    val allTimeRun: Int = 0,
 ) {
     /** True when at least one record here is also the best you have ever had. */
     val anyAllTimeBest: Boolean
@@ -44,7 +48,7 @@ data class Records(
             val big = bestBy(daily) { it.playedMs }?.let { DayRecord(it.playedMs, LocalDate.ofEpochDay(it.day), it.playedMs >= bigAll) }
             val plays = bestBy(daily) { it.plays.toLong() }?.let { DayRecord(it.plays.toLong(), LocalDate.ofEpochDay(it.day), it.plays >= playsAll) }
             val run = longestRun(daily)?.let { (len, s, e) -> RunRecord(len, LocalDate.ofEpochDay(s), LocalDate.ofEpochDay(e), len >= runAll) }
-            return Records(big, plays, run, mostReplayed?.takeIf { it.total >= 2 })
+            return Records(big, plays, run, mostReplayed?.takeIf { it.total >= 2 }, bigAll, playsAll, runAll)
         }
     }
 }

@@ -109,7 +109,7 @@ Each chart container has a spoken summary ("Listening time this month: 41 hours,
 5. Discovery (0.22.0: built, see docs/STATS_DISCOVERY.md).
 6. Your hour (0.19.0: built, ribbon, see docs/STATS_HOUR.md).
 7. Showing up (0.20.0: built, beads and chains, see docs/STATS_SHOWING_UP.md).
-8. Records (0.23.0: built, plaques, see docs/STATS_RECORDS.md).
+8. Records (0.23.1: redesigned as peaks skyline, see docs/STATS_RECORDS.md).
 9. How you listen (0.21.0: built, label with spectrums, see docs/STATS_LISTENER.md).
 10. Poster picker.
 11. Detail screens and doorways wired as each card lands.

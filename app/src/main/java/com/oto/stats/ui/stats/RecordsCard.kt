@@ -5,18 +5,17 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -27,57 +26,83 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.oto.stats.stats.Records
+import com.oto.stats.stats.PeriodKind
+import com.oto.stats.stats.Skyline
 import com.oto.stats.stats.StatsData
 import com.oto.stats.ui.theme.OtoColors
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 /*
  * Records. Spec: docs/STATS_RECORDS.md.
- * Plaques, not tiles: one personal best per row with its glyph, its value as the headline and its date.
- * A yellow ALL-TIME BEST tag appears only when nothing in your whole history beats it.
+ * One record at a time, as a giant numeral. Under it, your own days as a skyline with the record lit,
+ * so you see the peak in the context of everything else. No icons. If it is not your all-time best,
+ * a dashed line shows where your best sits above it.
  */
 
-private val Plate = Color(0xFF222222)
 private val dayFmt = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 private val shortFmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
-private enum class Mark { Peak, Flame, Bars, Loop }
+private enum class Rec(val tab: String) { Day("Biggest day"), Streak("Streak"), Plays("Most plays") }
 
-private data class Plaque(val label: String, val value: String, val sub: String, val best: Boolean, val mark: Mark)
+private class Plaque(
+    val rec: Rec, val lead: String, val unit: String, val sub: String, val best: Boolean,
+    val reference: String?, // text for the all-time line, null when this IS the all-time best
+    val refValue: Long, // all-time level in the same units as the series, for the dashed line
+    val series: (com.oto.stats.data.DayTotal) -> Long,
+    val lit: (LocalDate) -> Boolean,
+)
 
-private fun plaques(r: Records): List<Plaque> {
-    val out = ArrayList<Plaque>(4)
-    r.biggestDay?.let { out.add(Plaque("BIGGEST DAY", formatDuration(it.value), dayFmt.format(it.day), it.allTimeBest, Mark.Peak)) }
-    r.longestRun?.let {
-        out.add(Plaque("LONGEST STREAK", "${it.length} days", "${shortFmt.format(it.start)} – ${shortFmt.format(it.end)}", it.allTimeBest, Mark.Flame))
+private fun plaques(d: StatsData): List<Plaque> {
+    val r = d.records ?: return emptyList()
+    val out = ArrayList<Plaque>(3)
+    r.biggestDay?.let { b ->
+        out.add(
+            Plaque(
+                Rec.Day, formatDuration(b.value), "", dayFmt.format(b.day), b.allTimeBest,
+                if (b.allTimeBest) null else "All-time best ${formatDuration(r.allTimeDayMs)}", r.allTimeDayMs,
+                { it.playedMs }, { it == b.day },
+            ),
+        )
     }
-    r.mostPlaysDay?.let { out.add(Plaque("MOST PLAYS IN A DAY", "${formatCount(it.value.toInt())} plays", dayFmt.format(it.day), it.allTimeBest, Mark.Bars)) }
-    r.mostReplayed?.let { out.add(Plaque("MOST REPLAYED", it.title, "${it.total} plays", false, Mark.Loop)) }
+    r.longestRun?.let { run ->
+        out.add(
+            Plaque(
+                Rec.Streak, run.length.toString(), "days in a row", "${shortFmt.format(run.start)} – ${shortFmt.format(run.end)}", run.allTimeBest,
+                if (run.allTimeBest) null else "Your longest ever is ${r.allTimeRun} days", 0L,
+                { it.playedMs }, { !it.isBefore(run.start) && !it.isAfter(run.end) },
+            ),
+        )
+    }
+    r.mostPlaysDay?.let { p ->
+        out.add(
+            Plaque(
+                Rec.Plays, formatCount(p.value.toInt()), if (p.value == 1L) "play in a day" else "plays in a day", dayFmt.format(p.day), p.allTimeBest,
+                if (p.allTimeBest) null else "All-time best ${formatCount(r.allTimePlays)}", r.allTimePlays.toLong(),
+                { it.plays.toLong() }, { it == p.day },
+            ),
+        )
+    }
     return out
 }
 
 /** The sentence above the card. */
 fun recordsSentence(d: StatsData): String? {
     val r = d.records ?: return null
-    if (plaques(r).isEmpty()) return null
-    if (r.anyAllTimeBest && d.moments.personality.name != "") {
+    if (plaques(d).isEmpty()) return null
+    if (r.anyAllTimeBest) {
         val which = when {
             r.biggestDay?.allTimeBest == true -> "your biggest day ever"
             r.longestRun?.allTimeBest == true -> "your longest streak ever"
@@ -89,122 +114,88 @@ fun recordsSentence(d: StatsData): String? {
 }
 
 @Composable
-fun RecordsCard(d: StatsData, key: String, modifier: Modifier = Modifier) {
-    val r = d.records ?: return
-    val list = remember(r) { plaques(r) }
+fun RecordsCard(d: StatsData, kind: PeriodKind, firstTracked: LocalDate?, key: String, modifier: Modifier = Modifier) {
+    val list = remember(d.records) { plaques(d) }
     if (list.isEmpty()) return
     val reduced = rememberReducedMotion()
-    var played by rememberSaveable(key) { mutableStateOf(false) }
-    val intro = remember(key) { Animatable(if (reduced || played) 1f else 0f) }
-    LaunchedEffect(key) {
-        if (!reduced && !played) {
-            intro.animateTo(1f, tween(700, delayMillis = 150))
-            played = true
-        }
-    }
-    val summary = list.joinToString(" ") { "${it.label.lowercase()}: ${it.value}, ${it.sub}${if (it.best) ", all-time best" else ""}." }
+    var tab by rememberSaveable(key) { mutableIntStateOf(0) }
+    val p = list[tab.coerceIn(0, list.lastIndex)]
 
-    StatsCard(modifier.semantics(mergeDescendants = true) { contentDescription = summary }) {
-        list.forEachIndexed { i, p ->
-            if (i > 0) Canvas(Modifier.fillMaxWidth().height(1.dp)) { drawRect(Color.White.copy(alpha = 0.07f)) }
-            val local = ((intro.value * 1.6f - i * 0.18f)).coerceIn(0f, 1f)
-            val eased = 1f - (1f - local) * (1f - local) * (1f - local)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp)
-                    .graphicsLayer { alpha = eased; translationY = (1f - eased) * 12.dp.toPx() },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MarkTile(p.mark, Modifier.size(48.dp).clip(CircleShape).background(Plate))
-                Column(Modifier.padding(start = 16.dp).weight(1f)) {
-                    Text(p.label, style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.2.sp), color = OtoColors.TextTertiary, maxLines = 1)
-                    Text(
-                        p.value,
-                        style = giant(30f, -0.8).copy(fontFeatureSettings = "tnum"),
-                        color = OtoColors.TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 12.dp)) {
-                    Text(p.sub, style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"), color = OtoColors.TextSecondary, maxLines = 1)
-                    if (p.best) {
-                        Text(
-                            "ALL-TIME BEST",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp),
-                            color = OtoColors.Accent,
-                            modifier = Modifier
-                                .padding(top = 6.dp)
-                                .clip(CircleShape)
-                                .background(OtoColors.Accent.copy(alpha = 0.14f))
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                        )
-                    }
-                }
+    // The skyline spans the window; for All time that is everything since tracking began.
+    val start = (if (kind == PeriodKind.ALL) firstTracked else null) ?: d.heatStart
+    val end = if (d.heatEnd.isAfter(d.today)) d.today else d.heatEnd
+    val columns = remember(d.daily, p.rec, start, end) { Skyline.build(d.daily, start, end, 100, p.series, p.lit) }
+
+    val grow = remember(key) { Animatable(if (reduced) 1f else 0f) }
+    LaunchedEffect(key, p.rec) {
+        if (reduced) grow.snapTo(1f) else { grow.snapTo(0f); grow.animateTo(1f, tween(800, delayMillis = 80)) }
+    }
+    val summary = "${p.rec.tab}: ${p.lead} ${p.unit}, ${p.sub}." + if (p.best) " All-time best." else (p.reference?.let { " $it." } ?: "")
+
+    StatsCard(modifier.semantics { contentDescription = summary }) {
+        Segmented(
+            options = list.map { it.rec.tab },
+            selectedIndex = tab.coerceIn(0, list.lastIndex),
+            onSelect = { tab = it },
+            modifier = Modifier.fillMaxWidth(),
+            height = 40.dp,
+        )
+        Row(Modifier.padding(top = 22.dp), verticalAlignment = Alignment.Bottom) {
+            Text(p.lead, style = giant(if (p.unit.isEmpty() && p.lead.length > 5) 52f else 64f, -2.4).copy(brush = LitDigits, fontFeatureSettings = "tnum"), modifier = Modifier.alignByBaseline(), maxLines = 1)
+            if (p.unit.isNotEmpty()) {
+                Text(p.unit, style = giant(20f, -0.3), color = OtoColors.TextTertiary, modifier = Modifier.alignByBaseline().padding(start = 8.dp), maxLines = 1)
             }
         }
-    }
-}
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(p.sub, style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"), color = OtoColors.TextSecondary, maxLines = 1)
+            if (p.best) {
+                Text(
+                    "ALL-TIME BEST",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp),
+                    color = OtoColors.Accent,
+                    modifier = Modifier.clip(CircleShape).background(OtoColors.Accent.copy(alpha = 0.14f)).padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+        }
 
-@Composable
-private fun MarkTile(mark: Mark, modifier: Modifier) {
-    Canvas(modifier) {
-        val u = size.minDimension / 48f
-        val c = center
-        val ink = OtoColors.Accent
-        when (mark) {
-            Mark.Peak -> {
-                val path = Path().apply {
-                    moveTo(c.x - 15 * u, c.y + 10 * u)
-                    lineTo(c.x - 4 * u, c.y - 10 * u)
-                    lineTo(c.x + 2 * u, c.y - 1 * u)
-                    lineTo(c.x + 6 * u, c.y - 6 * u)
-                    lineTo(c.x + 15 * u, c.y + 10 * u)
-                    close()
-                }
-                drawPath(path, ink)
-            }
-            Mark.Flame -> {
-                val w = 22 * u
-                val h = 26 * u
-                val left = c.x - w / 2
-                val top = c.y - h / 2
-                fun x(v: Float) = left + v * w
-                fun y(v: Float) = top + v * h
-                val path = Path().apply {
-                    moveTo(x(0.52f), y(0.02f))
-                    cubicTo(x(0.55f), y(0.25f), x(0.85f), y(0.38f), x(0.85f), y(0.68f))
-                    cubicTo(x(0.85f), y(0.88f), x(0.70f), y(1.0f), x(0.50f), y(1.0f))
-                    cubicTo(x(0.30f), y(1.0f), x(0.15f), y(0.88f), x(0.15f), y(0.68f))
-                    cubicTo(x(0.15f), y(0.52f), x(0.25f), y(0.42f), x(0.32f), y(0.34f))
-                    cubicTo(x(0.34f), y(0.46f), x(0.40f), y(0.52f), x(0.45f), y(0.52f))
-                    cubicTo(x(0.42f), y(0.34f), x(0.45f), y(0.14f), x(0.52f), y(0.02f))
-                    close()
-                }
-                drawPath(path, ink)
-                drawCircle(Plate, w * 0.12f, Offset(x(0.5f), y(0.78f)))
-            }
-            Mark.Bars -> {
-                val hs = floatArrayOf(10f, 18f, 26f, 14f)
-                hs.forEachIndexed { k, hh ->
-                    val x = c.x + (k - 1.5f) * 9 * u - 2.5f * u
-                    drawRoundRect(ink, Offset(x, c.y + 13 * u - hh * u), Size(5 * u, hh * u), CornerRadius(2.5f * u))
+        val measurer = rememberTextMeasurer()
+        val refStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = OtoColors.TextTertiary)
+        Canvas(Modifier.padding(top = 22.dp).fillMaxWidth().height(132.dp)) {
+            if (columns.isEmpty()) return@Canvas
+            val scaleMax = maxOf(columns.maxOf { it.value }, if (p.reference != null) p.refValue else 0L).coerceAtLeast(1L)
+            val top = if (p.reference != null && p.refValue > 0) 16.dp.toPx() else 4.dp.toPx() // room for the label above a dashed line
+            val base = size.height
+            val usable = base - top
+            val n = columns.size
+            val slot = size.width / n
+            val barW = (slot * 0.68f).coerceIn(1.5.dp.toPx(), 14.dp.toPx())
+            val r = CornerRadius(minOf(barW / 2f, 3.dp.toPx()))
+            val g = grow.value
+            columns.forEachIndexed { i, c ->
+                if (c.value <= 0L) return@forEachIndexed
+                val local = ((g * (1f + n * 0.01f) - i * 0.01f)).coerceIn(0f, 1f)
+                val eased = 1f - (1f - local) * (1f - local) * (1f - local)
+                val h = (usable * c.value / scaleMax * eased).coerceAtLeast(2.dp.toPx())
+                val x = i * slot + (slot - barW) / 2f
+                if (c.lit) {
+                    drawRoundRect(Brush.verticalGradient(listOf(OtoColors.Accent, Color(0xFFC9A91C)), startY = base - h, endY = base), Offset(x, base - h), Size(barW, h), r)
+                } else {
+                    drawRoundRect(Color(0xFF2B2B2B), Offset(x, base - h), Size(barW, h), r)
                 }
             }
-            Mark.Loop -> {
-                val r = 11 * u
-                drawArc(ink, 30f, 295f, false, c - Offset(r, r), Size(2 * r, 2 * r), style = Stroke(2.4f * u, cap = StrokeCap.Round))
-                val a = (30 + 295) * PI / 180
-                val p = c + Offset((cos(a) * r).toFloat(), (sin(a) * r).toFloat())
-                val t = Offset((-sin(a)).toFloat(), cos(a).toFloat())
-                val n = Offset(cos(a).toFloat(), sin(a).toFloat())
-                val tip = p + t * (5 * u)
-                val b1 = p + n * (4.5f * u)
-                val b2 = p - n * (4.5f * u)
-                drawPath(Path().apply { moveTo(tip.x, tip.y); lineTo(b1.x, b1.y); lineTo(b2.x, b2.y); close() }, ink)
+            drawLine(Color.White.copy(alpha = 0.08f), Offset(0f, base), Offset(size.width, base), 1.dp.toPx())
+            if (p.reference != null && p.refValue > 0L) {
+                val y = base - usable * p.refValue / scaleMax
+                drawLine(
+                    Color.White.copy(alpha = 0.40f), Offset(0f, y), Offset(size.width, y), 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 5.dp.toPx())),
+                )
+                val l = measurer.measure(p.reference, refStyle)
+                drawText(l, topLeft = Offset(size.width - l.size.width, y - l.size.height - 3.dp.toPx()))
             }
+        }
+        if (p.reference != null && p.refValue <= 0L) {
+            Text(p.reference, style = MaterialTheme.typography.bodySmall, color = OtoColors.TextTertiary, modifier = Modifier.padding(top = 12.dp))
         }
     }
 }
