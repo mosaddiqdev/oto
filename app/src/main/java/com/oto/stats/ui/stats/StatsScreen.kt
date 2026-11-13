@@ -43,6 +43,7 @@ fun StatsScreen(model: StatsModel, artStore: ArtStore, photos: ArtistPhotos, hea
     val loaded = ui.content is StatsUiState.Content.Ready
 
     val listState = rememberLazyListState()
+    val is24 = android.text.format.DateFormat.is24HourFormat(androidx.compose.ui.platform.LocalContext.current)
     // The in-page period control scrolls away; as it goes, the glass header grows its own compact copy.
     val goneAt = with(LocalDensity.current) { 56.dp.toPx() }
     val fadeOver = with(LocalDensity.current) { 64.dp.toPx() }
@@ -62,7 +63,7 @@ fun StatsScreen(model: StatsModel, artStore: ArtStore, photos: ArtistPhotos, hea
             StatsUiState.Content.EmptyPeriod -> item {
                 Note("No listening in ${ui.periodLabel}", "Step back to an earlier period, or pick another range.")
             }
-            is StatsUiState.Content.Ready -> ready(c.data, ui, model, artStore, photos, loaded)
+            is StatsUiState.Content.Ready -> ready(c.data, ui, model, artStore, photos, loaded, is24)
         }
         item(key = "trust") { TrustLine(ui) }
     }
@@ -70,7 +71,7 @@ fun StatsScreen(model: StatsModel, artStore: ArtStore, photos: ArtistPhotos, hea
 
 /** Cards are rebuilt one at a time, in the order set out in docs/STATS.md. Nothing is drawn here until its turn. */
 @Suppress("UNUSED_PARAMETER")
-private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsModel, artStore: ArtStore, photos: ArtistPhotos, loaded: Boolean) {
+private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsModel, artStore: ArtStore, photos: ArtistPhotos, loaded: Boolean, is24: Boolean) {
     item(key = "hero") {
         HeroCard(d, ui.periodLabel, ui.selection.kind, Modifier.cardEnter(0, loaded))
     }
@@ -88,6 +89,13 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
         item(key = "days") {
             StatsSection("Your days", sentence = sentence, modifier = Modifier.cardEnter(2, loaded)) {
                 DaysCard(d, ui.periodLabel + ui.selection.kind.name)
+            }
+        }
+    }
+    hourSentence(d.hours, is24)?.let { sentence ->
+        item(key = "hour") {
+            StatsSection("Your hour", sentence = sentence, modifier = Modifier.cardEnter(3, loaded)) {
+                HourCard(d, ui.periodLabel + ui.selection.kind.name)
             }
         }
     }

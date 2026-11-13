@@ -63,11 +63,11 @@ import kotlin.math.abs
  */
 
 private val HeroBase = Color(0xFF151515)
-private val LitDigits = Brush.verticalGradient(listOf(Color(0xFFFFF4A8), OtoColors.Accent, Color(0xFFC9A91C)))
-private val DigitGlow = Shadow(OtoColors.Accent.copy(alpha = 0.30f), Offset.Zero, 38f)
+internal val LitDigits = Brush.verticalGradient(listOf(Color(0xFFFFF4A8), OtoColors.Accent, Color(0xFFC9A91C)))
+internal val DigitGlow = Shadow(OtoColors.Accent.copy(alpha = 0.30f), Offset.Zero, 38f)
 private val Rim = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.14f), Color.White.copy(alpha = 0.04f)))
 
-private fun giant(sp: Float, track: Double) = TextStyle(
+internal fun giant(sp: Float, track: Double) = TextStyle(
     fontFamily = Display, fontWeight = FontWeight.Bold, fontSize = sp.sp, lineHeight = (sp * 0.86f).sp, letterSpacing = track.sp,
 )
 
