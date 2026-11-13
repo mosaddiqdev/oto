@@ -99,6 +99,13 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
             }
         }
     }
+    if (d.hours != null) showingUpSentence(showingUpDays(d, ui.trackedSince), ui.selection.kind)?.let { sentence ->
+        item(key = "showing") {
+            StatsSection("Showing up", sentence = sentence, modifier = Modifier.cardEnter(4, loaded)) {
+                ShowingUpCard(d, ui.selection.kind, ui.trackedSince, ui.periodLabel + ui.selection.kind.name)
+            }
+        }
+    }
 }
 
 @Composable
