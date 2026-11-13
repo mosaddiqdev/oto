@@ -169,13 +169,19 @@ fun ShowingUpCard(d: StatsData, kind: PeriodKind, firstTracked: LocalDate?, key:
                 }
             }
             Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(bottom = 4.dp)) {
-                Text(if (streakNow) "STREAK" else "LONGEST RUN", style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp), color = OtoColors.TextTertiary)
-                Text(
-                    if (streakValue >= 2) "$streakValue days" else "–",
-                    style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"),
-                    color = if (streakNow) OtoColors.Accent else OtoColors.TextPrimary,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.semantics { contentDescription = if (streakValue >= 2) "${if (streakNow) "Current streak" else "Longest run"}, $streakValue days" else "No streak" },
+                ) {
+                    Flame(if (streakNow) OtoColors.Accent else OtoColors.TextTertiary, Modifier.size(24.dp))
+                    Text(
+                        if (streakValue >= 2) streakValue.toString() else "\u2013",
+                        style = giant(40f, -1.4).copy(fontFeatureSettings = "tnum"),
+                        color = if (streakNow) OtoColors.Accent else OtoColors.TextSecondary,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
             }
         }
 
