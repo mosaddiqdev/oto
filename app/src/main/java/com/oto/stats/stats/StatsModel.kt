@@ -74,6 +74,8 @@ data class StatsData(
     val heatStart: LocalDate,
     val heatEnd: LocalDate,
     val today: LocalDate,
+    /** Personal bests inside this window, checked against your whole history. */
+    val records: Records? = null,
 )
 
 /** The few things worth saying about a period, each backed by a number. */
@@ -202,6 +204,7 @@ class StatsModel(
         val activeInPeriod = daily.size
         val enough = StatsMath.hasEnoughForPatterns(headline.plays, activeInPeriod)
 
+        val allDaily = dao.dailyInRange(0L, Long.MAX_VALUE)
         val comparison = period.comparison(today, ws)
         var previous: Headline? = null
         var previousArtists: Int? = null
@@ -267,7 +270,8 @@ class StatsModel(
             daily = daily,
             moments = moments,
             comparisonName = comparisonName(period, sel.kind, ws),
-            rank = PeriodRank.compute(dao.dailyInRange(0L, Long.MAX_VALUE), period, today, ws),
+            rank = PeriodRank.compute(allDaily, period, today, ws),
+            records = Records.compute(daily, allDaily, if (enough) dao.mostReplayed(startMs, endMs) else null),
             heatStart = if (sel.kind == PeriodKind.ALL) today.minusMonths(11).withDayOfMonth(1) else period.range.start,
             heatEnd = if (sel.kind == PeriodKind.ALL) today else period.range.endExclusive.minusDays(1),
             today = today,
