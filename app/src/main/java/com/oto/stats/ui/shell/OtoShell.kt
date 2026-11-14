@@ -8,6 +8,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.CompositionLocalProvider
+import com.oto.stats.ui.detail.ArtistPage
 import com.oto.stats.ui.detail.TrackPage
 import com.oto.stats.ui.nav.LocalNavigator
 import com.oto.stats.ui.nav.Navigator
@@ -265,6 +266,7 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
             ) { pages ->
                 when (val top = pages.lastOrNull()) {
                     is Route.Track -> TrackPage(top, container) { navigator.back() }
+                    is Route.Artist -> ArtistPage(top, container) { navigator.back() }
                     null -> Box(Modifier.fillMaxSize())
                 }
             }

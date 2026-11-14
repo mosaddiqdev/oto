@@ -565,4 +565,98 @@ abstract class ListeningDao {
 
     @Query("SELECT COUNT(DISTINCT trackId) FROM listening_events WHERE startedAt >= :startMs AND startedAt < :endMs")
     abstract suspend fun tracksPlayed(startMs: Long, endMs: Long): Int
+
+    // ---- One artist (detail page) ----
+
+    @Query("SELECT * FROM artists WHERE id = :id")
+    abstract suspend fun artistById(id: Long): ArtistEntity?
+
+    @Query(
+        """
+        SELECT COUNT(*) AS plays,
+               COALESCE(SUM(e.playedMs), 0) AS playedMs,
+               COUNT(DISTINCT e.trackId) AS tracks,
+               COALESCE(MIN(e.startedAt), 0) AS firstAt,
+               COALESCE(MAX(e.startedAt), 0) AS lastAt
+        FROM listening_events e
+        JOIN track_artists ta ON ta.trackId = e.trackId
+        WHERE ta.artistId = :artistId AND e.startedAt >= :startMs AND e.startedAt < :endMs
+        """,
+    )
+    abstract suspend fun artistStats(artistId: Long, startMs: Long, endMs: Long): ArtistStats
+
+    @Query(
+        """
+        SELECT ((e.startedAt + e.tzOffsetMinutes * 60000) / 86400000) AS day,
+               COALESCE(SUM(e.playedMs), 0) AS playedMs, COUNT(*) AS plays
+        FROM listening_events e
+        JOIN track_artists ta ON ta.trackId = e.trackId
+        WHERE ta.artistId = :artistId AND e.startedAt >= :startMs AND e.startedAt < :endMs
+        GROUP BY day
+        ORDER BY day
+        """,
+    )
+    abstract suspend fun artistDaily(artistId: Long, startMs: Long, endMs: Long): List<DayTotal>
+
+    @Query(
+        """
+        SELECT CAST(((e.startedAt + e.tzOffsetMinutes * 60000) % 86400000) / 3600000 AS INTEGER) AS hour,
+               COALESCE(SUM(e.playedMs), 0) AS playedMs, COUNT(*) AS plays
+        FROM listening_events e
+        JOIN track_artists ta ON ta.trackId = e.trackId
+        WHERE ta.artistId = :artistId AND e.startedAt >= :startMs AND e.startedAt < :endMs
+        GROUP BY hour
+        """,
+    )
+    abstract suspend fun artistHourly(artistId: Long, startMs: Long, endMs: Long): List<HourBucket>
+
+    @Query(
+        """
+        SELECT t.id AS trackId, t.title AS title, t.artistText AS artist, t.identityKey AS identityKey,
+               COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
+        FROM listening_events e
+        JOIN tracks t ON t.id = e.trackId
+        JOIN track_artists ta ON ta.trackId = t.id
+        WHERE ta.artistId = :artistId AND e.startedAt >= :startMs AND e.startedAt < :endMs
+        GROUP BY t.id
+        ORDER BY COUNT(*) DESC, SUM(e.playedMs) DESC, t.title
+        LIMIT :limit
+        """,
+    )
+    abstract suspend fun artistTopTracks(artistId: Long, startMs: Long, endMs: Long, limit: Int): List<TopTrackRow>
+
+    @Query(
+        """
+        SELECT MIN(t.album) AS album, (SELECT name FROM artists WHERE id = :artistId) AS artist, MIN(t.identityKey) AS identityKey,
+               COUNT(*) AS plays, COALESCE(SUM(e.playedMs), 0) AS playedMs
+        FROM listening_events e
+        JOIN tracks t ON t.id = e.trackId
+        JOIN track_artists ta ON ta.trackId = t.id
+        WHERE ta.artistId = :artistId AND e.startedAt >= :startMs AND e.startedAt < :endMs
+          AND t.album IS NOT NULL AND TRIM(t.album) != ''
+        GROUP BY LOWER(TRIM(t.album))
+        ORDER BY COUNT(*) DESC, SUM(e.playedMs) DESC, album
+        LIMIT :limit
+        """,
+    )
+    abstract suspend fun artistTopAlbums(artistId: Long, startMs: Long, endMs: Long, limit: Int): List<TopAlbumRow>
+
+    /** Where this artist stands among all artists in the window, by plays: 1 is the most played. */
+    @Query(
+        """
+        SELECT COUNT(*) + 1 FROM (
+            SELECT ta.artistId FROM listening_events e
+            JOIN track_artists ta ON ta.trackId = e.trackId
+            JOIN artists a ON a.id = ta.artistId
+            WHERE e.startedAt >= :startMs AND e.startedAt < :endMs AND a.normalizedName != :unknownKey
+            GROUP BY ta.artistId
+            HAVING COUNT(*) > (
+                SELECT COUNT(*) FROM listening_events e2
+                JOIN track_artists ta2 ON ta2.trackId = e2.trackId
+                WHERE ta2.artistId = :artistId AND e2.startedAt >= :startMs AND e2.startedAt < :endMs
+            )
+        )
+        """,
+    )
+    abstract suspend fun artistRank(artistId: Long, startMs: Long, endMs: Long, unknownKey: String): Int
 }

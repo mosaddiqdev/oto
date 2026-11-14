@@ -41,7 +41,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +57,7 @@ import com.oto.stats.stats.TrackDetail
 import com.oto.stats.tracking.MusicApps
 import com.oto.stats.ui.components.TrackCover
 import com.oto.stats.ui.components.timeAgo
+import com.oto.stats.ui.nav.LocalNavigator
 import com.oto.stats.ui.nav.Route
 import com.oto.stats.ui.stats.LitDigits
 import com.oto.stats.ui.stats.StatsCard
@@ -99,17 +105,17 @@ fun TrackPage(route: Route.Track, container: AppContainer, onBack: () -> Unit) {
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(28.dp),
             ) {
-                content(d, container, key = "${route.id}/$start/$end", windowLabel = if (allTime) null else window?.label, is24 = is24, onShowAll = { allTime = true }, allTime = allTime)
+                content(d, container, linkWindow = if (allTime) null else window, key = "${route.id}/$start/$end", windowLabel = if (allTime) null else window?.label, is24 = is24, onShowAll = { allTime = true }, allTime = allTime)
                 item { Box(Modifier.windowInsetsPadding(WindowInsets.navigationBars).height(1.dp)) }
             }
         }
     }
 }
 
-private fun LazyListScope.content(d: TrackDetail, container: AppContainer, key: String, windowLabel: String?, is24: Boolean, onShowAll: () -> Unit, allTime: Boolean) {
+private fun LazyListScope.content(d: TrackDetail, container: AppContainer, linkWindow: Route.Window?, key: String, windowLabel: String?, is24: Boolean, onShowAll: () -> Unit, allTime: Boolean) {
     val zone = ZoneId.systemDefault()
     val s = d.stats
-    item(key = "hero") { Hero(d, container, key, windowLabel) }
+    item(key = "hero") { Hero(d, container, key, windowLabel, linkWindow) }
     if (s.plays == 0) {
         item(key = "none") {
             StatsCard {
@@ -143,7 +149,8 @@ private fun LazyListScope.content(d: TrackDetail, container: AppContainer, key: 
 }
 
 @Composable
-private fun Hero(d: TrackDetail, container: AppContainer, key: String, windowLabel: String?) {
+private fun Hero(d: TrackDetail, container: AppContainer, key: String, windowLabel: String?, linkWindow: Route.Window?) {
+    val nav = LocalNavigator.current
     val t = d.track
     val plays = rememberCountUp(d.stats.plays.toLong(), key, hero = true)
     Column(Modifier.fillMaxWidth()) {
@@ -151,8 +158,21 @@ private fun Hero(d: TrackDetail, container: AppContainer, key: String, windowLab
             TrackCover(t.identityKey, t.title, container.artStore, 96.dp)
             Column(Modifier.padding(start = 16.dp).weight(1f)) {
                 Text(t.title, style = MaterialTheme.typography.headlineSmall, color = OtoColors.TextPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                val artists = d.artists.joinToString(", ") { it.name }.ifBlank { t.artistText }
-                Text(artists, style = MaterialTheme.typography.bodyLarge, color = OtoColors.TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+                // Every credited artist is a door to their page.
+                val names = buildAnnotatedString {
+                    if (d.artists.isEmpty()) append(t.artistText)
+                    d.artists.forEachIndexed { i, a ->
+                        if (i > 0) append(", ")
+                        withLink(
+                            LinkAnnotation.Clickable(
+                                tag = "artist:${a.artistId}",
+                                styles = TextLinkStyles(SpanStyle(color = OtoColors.TextSecondary)),
+                                linkInteractionListener = { nav?.open(Route.Artist(a.artistId, linkWindow)) },
+                            ),
+                        ) { append(a.name) }
+                    }
+                }
+                Text(names, style = MaterialTheme.typography.bodyLarge, color = OtoColors.TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
                 if (!t.album.isNullOrBlank()) {
                     Text(t.album, style = MaterialTheme.typography.bodyMedium, color = OtoColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -197,10 +217,10 @@ private fun Facts(d: TrackDetail, zone: ZoneId) {
 }
 
 @Composable
-private fun FactDivider() = Box(Modifier.padding(horizontal = 12.dp).width(1.dp).height(40.dp).background(OtoColors.Hairline))
+internal fun FactDivider() = Box(Modifier.padding(horizontal = 12.dp).width(1.dp).height(40.dp).background(OtoColors.Hairline))
 
 @Composable
-private fun Fact(label: String, value: String, modifier: Modifier) {
+internal fun Fact(label: String, value: String, modifier: Modifier) {
     Column(modifier) {
         Text(label, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp, fontWeight = FontWeight.Medium), color = OtoColors.TextTertiary, maxLines = 1)
         Text(value, style = giant(24f, -0.6).copy(fontFeatureSettings = "tnum"), color = OtoColors.TextPrimary, maxLines = 1, modifier = Modifier.padding(top = 8.dp))
@@ -208,15 +228,15 @@ private fun Fact(label: String, value: String, modifier: Modifier) {
 }
 
 @Composable
-private fun History(d: TrackDetail, zone: ZoneId, key: String) {
+private fun History(d: TrackDetail, zone: ZoneId, key: String) =
+    HistoryCard(d.daily, Instant.ofEpochMilli(d.stats.firstAt).atZone(zone).toLocalDate(), d.insights.peakDay?.day, zone, key)
+
+/** Plays per day from the first play (or the window start) to today, with the busiest day lit. Shared by the Track and Artist pages. */
+@Composable
+internal fun HistoryCard(daily: List<com.oto.stats.data.DayTotal>, first: LocalDate, peakDay: Long?, zone: ZoneId, key: String) {
     val today = LocalDate.now(zone)
-    val s = d.stats
-    val first = Instant.ofEpochMilli(s.firstAt).atZone(zone).toLocalDate()
-    // From the first play (All time) or the start of the window; to today or the window's last day.
-    val daily = d.daily
     val startDay = LocalDate.ofEpochDay(daily.first().day).let { if (it.isBefore(first)) it else first }
     val endDay = LocalDate.ofEpochDay(daily.last().day).let { if (it.isAfter(today)) it else today }
-    val peakDay = d.insights.peakDay?.day
     val columns = remember(daily, startDay, endDay) {
         Skyline.build(daily, startDay, endDay, 100, { it.plays.toLong() }, { it.toEpochDay() == peakDay })
     }
@@ -253,13 +273,15 @@ private fun History(d: TrackDetail, zone: ZoneId, key: String) {
 }
 
 @Composable
-private fun Habits(d: TrackDetail, is24: Boolean) {
-    val i = d.insights
+private fun Habits(d: TrackDetail, is24: Boolean) = HabitsCard(d.insights, d.stats.lastAt, is24)
+
+@Composable
+internal fun HabitsCard(i: com.oto.stats.stats.TrackInsights, lastAt: Long, is24: Boolean) {
     val rows = buildList {
         i.favouriteHour?.let { add("Favourite hour" to hourText(it, is24)) }
         add("Days played" to "${formatCount(i.daysPlayed)} ${if (i.daysPlayed == 1) "day" else "days"}")
         i.run?.let { add("Longest run" to "${it.first} days in a row") }
-        add("Last heard" to timeAgo(d.stats.lastAt))
+        add("Last heard" to timeAgo(lastAt))
     }
     StatsCard {
         rows.forEachIndexed { idx, (label, value) ->
@@ -272,7 +294,7 @@ private fun Habits(d: TrackDetail, is24: Boolean) {
     }
 }
 
-private fun hourText(h: Int, is24: Boolean): String =
+internal fun hourText(h: Int, is24: Boolean): String =
     if (is24) String.format(Locale.US, "%02d:00", h) else "${if (h % 12 == 0) 12 else h % 12} ${if (h < 12) "am" else "pm"}"
 
 @Composable

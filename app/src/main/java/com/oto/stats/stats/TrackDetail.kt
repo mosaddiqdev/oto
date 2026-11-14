@@ -1,6 +1,11 @@
 package com.oto.stats.stats
 
+import com.oto.stats.data.ArtistEntity
+import com.oto.stats.data.ArtistStats
+import com.oto.stats.data.TopAlbumRow
+import com.oto.stats.data.TopTrackRow
 import com.oto.stats.data.ArtistRef
+import com.oto.stats.tracking.engine.Normalize
 import com.oto.stats.data.DayTotal
 import com.oto.stats.data.ListeningDao
 import com.oto.stats.data.TrackEntity
@@ -44,12 +49,45 @@ data class TrackDetail(
     val insights: TrackInsights,
 )
 
+/** Everything the Artist page shows, for one window. */
+data class ArtistDetail(
+    val artist: ArtistEntity,
+    val stats: ArtistStats,
+    val rank: Int,
+    val artistsPlayed: Int,
+    val daily: List<DayTotal>,
+    val topTracks: List<TopTrackRow>,
+    val albums: List<TopAlbumRow>,
+    val insights: TrackInsights,
+)
+
 /** Loads detail pages from the local listening history, reloading when it changes. */
 @OptIn(FlowPreview::class)
 class DetailModel(private val dao: ListeningDao) {
 
     fun track(id: Long, startMs: Long, endMs: Long): Flow<TrackDetail?> =
         dao.changeMarker().distinctUntilChanged().debounce(250).map { loadTrack(id, startMs, endMs) }
+
+    fun artist(id: Long, startMs: Long, endMs: Long): Flow<ArtistDetail?> =
+        dao.changeMarker().distinctUntilChanged().debounce(250).map { loadArtist(id, startMs, endMs) }
+
+    private suspend fun loadArtist(id: Long, startMs: Long, endMs: Long): ArtistDetail? {
+        val artist = dao.artistById(id) ?: return null
+        val unknown = Normalize.artistKey(Normalize.UNKNOWN_ARTIST)
+        val daily = dao.artistDaily(id, startMs, endMs)
+        val hours = IntArray(24)
+        for (b in dao.artistHourly(id, startMs, endMs)) hours[b.hour.coerceIn(0, 23)] += b.plays
+        return ArtistDetail(
+            artist = artist,
+            stats = dao.artistStats(id, startMs, endMs),
+            rank = dao.artistRank(id, startMs, endMs, unknown),
+            artistsPlayed = dao.uniqueArtists(startMs, endMs, unknown),
+            daily = daily,
+            topTracks = dao.artistTopTracks(id, startMs, endMs, 8),
+            albums = dao.artistTopAlbums(id, startMs, endMs, 10),
+            insights = TrackInsights.of(daily, hours.toList()),
+        )
+    }
 
     private suspend fun loadTrack(id: Long, startMs: Long, endMs: Long): TrackDetail? {
         val track = dao.trackById(id) ?: return null

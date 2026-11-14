@@ -105,10 +105,16 @@ fun MostPlayedCard(
     modifier: Modifier = Modifier,
 ) {
     val nav = LocalNavigator.current
-    // Tracks open their page; artists and albums join as their pages are built.
+    // Tracks and artists open their pages; albums join when theirs is built.
     val opener: (Entry, Tab) -> (() -> Unit)? = { e, t ->
-        val id = e.trackId
-        if (nav != null && t == Tab.Tracks && id != null) ({ nav.open(Route.Track(id, window)) }) else null
+        val trackId = e.trackId
+        val artistId = e.artistId
+        when {
+            nav == null -> null
+            t == Tab.Tracks && trackId != null -> ({ nav.open(Route.Track(trackId, window)) })
+            t == Tab.Artists && artistId != null -> ({ nav.open(Route.Artist(artistId, window)) })
+            else -> null
+        }
     }
     StatsCard(modifier.animateContentSize(tween(260, easing = OtoMotion.Decelerate))) {
         Segmented(

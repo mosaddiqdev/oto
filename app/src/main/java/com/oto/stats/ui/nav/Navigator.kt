@@ -15,10 +15,13 @@ sealed class Route {
 
     data class Track(val id: Long, override val window: Window? = null) : Route()
 
+    data class Artist(val id: Long, override val window: Window? = null) : Route()
+
     fun encode(): String {
         val w = window?.let { ":${it.startMs}:${it.endMs}:${URLEncoder.encode(it.label, "UTF-8")}" }.orEmpty()
         return when (this) {
             is Track -> "track:$id$w"
+            is Artist -> "artist:$id$w"
         }
     }
 
@@ -28,6 +31,7 @@ sealed class Route {
             val window = if (p.size >= 5) Window(p[2].toLong(), p[3].toLong(), URLDecoder.decode(p[4], "UTF-8")) else null
             when (p[0]) {
                 "track" -> Track(p[1].toLong(), window)
+                "artist" -> Artist(p[1].toLong(), window)
                 else -> null
             }
         }.getOrNull()

@@ -55,3 +55,5 @@ data class TrackListen(
     val sourcePackage: String,
     val tzOffsetMinutes: Int,
 )
+
+data class ArtistStats(val plays: Int, val playedMs: Long, val tracks: Int, val firstAt: Long, val lastAt: Long)
