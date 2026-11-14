@@ -1,16 +1,14 @@
-# Records card spec (Stats card 8), v2 "Your peaks"
+# Records card spec (Stats card 8), v3 "Your peaks, one card"
 
-v1 (tiles with icons) was dropped: it read like a generic achievements list. A record only means something next to everything else you did, so the card shows the record IN your own history.
+v1 (tiles with icons) read as a generic achievements list. v2 (tabs, one record at a time) hid two of three records behind taps. v3 shows every record at once in one card, no tabs, and puts them in your own history.
 
 **Question:** what are my bests, and how big are they really?
 
-- **One record at a time** through the same sliding switch as Most played: Biggest day, Streak, Most plays (a tab is hidden when it has nothing to say).
-- **The numeral is the graphic**, lit like the hero: "5h 12m", "12 days in a row", "61 plays in a day". Under it the date (or date range for a streak).
-- **The skyline:** every day of the window as a column (several days per column when there are more than 100, always keeping the peak so a record is never averaged away). Quiet grey columns, with the record day, or every day of the streak, lit yellow. No icons.
-- **Honest context:** when the record is not your all-time best, a dashed line shows where your best sits and names it ("All-time best 9h 05m"); the scale grows to include it, so you can see how far above it is. For streaks it says "Your longest ever is 20 days". When it IS your all-time best, a small yellow ALL-TIME BEST tag replaces the line.
-- **All time** spans everything since tracking began.
-- **Sentence above:** "A personal best: your biggest day ever is in this window." or "Your biggest day was Sat 8 Nov, with 5h 12m."
-- **Motion:** columns rise left to right with a tiny stagger, replayed when you change record, ease-out, no overshoot. Reduced motion jumps to final.
-- **Data gate:** hidden until there are 10 plays over 3 days.
-- **Pure models:** `Records` and `Skyline` (peak-preserving downsampling), unit tested.
-- **Doorway (later):** all records with dates, tapping the lit day opens that day.
+- **Hero:** the biggest day as the lit giant numeral ("5h 12m"), with its date and a yellow ALL-TIME BEST tag when true.
+- **One skyline, three marks.** Every day of the window is a column (peak-preserving buckets when more than 100). Grey columns are your days. The record day is lit yellow. The streak days are tinted yellow and a **bracket** under the baseline spans them. The most-plays day wears a **ring** above its column. No text on the chart except the dashed all-time line.
+- **Two supporting stats** side by side under the chart, each keyed by its own mark (bracket = Streak, ring = Most plays): value, dates, and either "All-time best" (yellow) or "Longest ever 20" / "Best ever 91" (tertiary).
+- **Honest context:** if the biggest day is not your all-time best, a dashed line with "All-time best 9h 05m" shows where it sits; the scale grows to include it.
+- A missing record (no streak yet) simply drops its block; the card never shows tabs.
+- **Motion:** columns rise left to right, then the ring fades in, then the bracket draws; ease-out, no overshoot; reduced motion jumps to the end.
+- **Data gate:** hidden until 10 plays over 3 days.
+- **Pure models:** `Records`, `Skyline` (tested). **Doorway (later):** all records with dates; tapping the lit day opens it.
