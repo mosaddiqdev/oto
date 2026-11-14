@@ -24,7 +24,7 @@ data class DemoListen(val result: ListenResult, val tzOffsetMinutes: Int)
  * without waiting months for real data. Pure: same inputs, same output (fixed seed).
  *
  * It has commute and evening peaks, quieter weekend mornings, a few heavy artists plus a long tail,
- * skips, replays, three apps, one quiet month and one trip in another time zone. All names are made up.
+ * skips, replays, three apps, one quiet month and one trip in another time zone. Real artists and songs, so the demo looks like a real library.
  */
 object DemoHistory {
     private const val SEED = 20_26L
@@ -34,37 +34,50 @@ object DemoHistory {
 
     private class Song(val title: String, val artist: String, val album: String?, val durationMs: Long)
 
-    private val artists = listOf(
-        "Hollow Lanterns", "Marlo Vance", "The Quiet Engines", "Seren Okafor", "Paper Satellites",
-        "Dune Arcade", "Iris & the Tide", "Kobalt Kids", "Lumen Choir", "Nadia Brandt feat. Oren Vale",
-        "Static Orchard", "Vesper Lane", "Tomo Hayashi", "Glass Meridian", "Ashen Coast",
-    )
-    private val titleA = listOf(
-        "Blue", "Midnight", "Slow", "Paper", "Electric", "Hollow", "Golden", "Distant", "Velvet", "Neon",
-        "Quiet", "Broken", "Summer", "Winter", "Open", "Last", "Faded", "Rising", "Silver", "Wild",
-    )
-    private val titleB = listOf(
-        "Signals", "Harbor", "Echoes", "Gardens", "Static", "Weather", "Machines", "Letters", "Rivers", "Hours",
-        "Windows", "Orbit", "Parade", "Shadows", "Lights", "Season", "Maps", "Fever", "Tides", "Rooms",
-    )
+    /** One artist's songs on one album: title to length in seconds (approximate). */
+    private fun album(artist: String, album: String?, vararg songs: Pair<String, Int>) =
+        songs.map { (title, sec) -> Song(title, artist, album, sec * 1000L) }
 
-    private fun catalog(rnd: Random): List<Song> {
-        val used = HashSet<String>()
-        val songs = ArrayList<Song>()
-        for ((ai, artist) in artists.withIndex()) {
-            val albums = listOf("${titleB[(ai * 3) % titleB.size]} Theory", "${titleA[(ai * 5) % titleA.size]} Season")
-            val count = 6 + rnd.nextInt(5)
-            var made = 0
-            while (made < count) {
-                val title = "${titleA[rnd.nextInt(titleA.size)]} ${titleB[rnd.nextInt(titleB.size)]}"
-                if (!used.add("$title|$artist")) continue
-                val album = if (rnd.nextInt(10) == 0) null else albums[rnd.nextInt(albums.size)]
-                songs.add(Song(title, artist, album, (150_000L + rnd.nextInt(130_000))))
-                made++
-            }
-        }
-        return songs
-    }
+    /**
+     * Real artists and songs, so the demo looks like a real library. Order sets the favourites:
+     * early artists and early songs get the heaviest rotation, the rest form the long tail.
+     * The Instant Crush rows carry a "feat." credit on purpose, to exercise artist matching.
+     */
+    private val catalogSongs: List<Song> = listOf(
+        album("The Weeknd", "After Hours", "Blinding Lights" to 200, "Save Your Tears" to 215, "Heartless" to 202, "In Your Eyes" to 238),
+        album("The Weeknd", "Starboy", "Die For You" to 260),
+        album("Arijit Singh", "Aashiqui 2", "Tum Hi Ho" to 262),
+        album("Arijit Singh", "Ae Dil Hai Mushkil", "Channa Mereya" to 289, "Ae Dil Hai Mushkil" to 269),
+        album("Arijit Singh", "Brahm\u0101stra", "Kesariya" to 268),
+        album("Arijit Singh", "Bhediya", "Apna Bana Le" to 261),
+        album("Taylor Swift", "1989", "Blank Space" to 231, "Style" to 231, "Shake It Off" to 219),
+        album("Taylor Swift", "folklore", "cardigan" to 239, "august" to 262),
+        album("Taylor Swift", "Midnights", "Anti-Hero" to 200),
+        album("Daft Punk", "Random Access Memories", "Lose Yourself to Dance" to 353, "Giorgio by Moroder" to 544),
+        album("Daft Punk feat. Julian Casablancas", "Random Access Memories", "Instant Crush" to 337),
+        album("Daft Punk", "Discovery", "One More Time" to 320, "Digital Love" to 301, "Harder, Better, Faster, Stronger" to 224),
+        album("Kendrick Lamar", "DAMN.", "HUMBLE." to 177, "DNA." to 185),
+        album("Kendrick Lamar", "good kid, m.A.A.d city", "Swimming Pools (Drank)" to 313, "Money Trees" to 386, "m.A.A.d city" to 350),
+        album("Kendrick Lamar", "To Pimp a Butterfly", "Alright" to 219, "King Kunta" to 234),
+        album("A. R. Rahman", "Rockstar", "Kun Faya Kun" to 473, "Tum Ho" to 248),
+        album("A. R. Rahman", "Slumdog Millionaire", "Jai Ho" to 318),
+        album("Radiohead", "OK Computer", "Paranoid Android" to 387, "Karma Police" to 261, "No Surprises" to 229, "Let Down" to 299),
+        album("Radiohead", "In Rainbows", "Nude" to 255),
+        album("Frank Ocean", "Blonde", "Nights" to 307, "Ivy" to 249, "Self Control" to 249, "Pink + White" to 184),
+        album("Frank Ocean", "channel ORANGE", "Thinkin Bout You" to 200, "Super Rich Kids" to 304),
+        album("Tame Impala", "Currents", "The Less I Know the Better" to 216, "Let It Happen" to 467, "Eventually" to 319),
+        album("Fleetwood Mac", "Rumours", "Dreams" to 257, "Go Your Own Way" to 223, "The Chain" to 270, "Don't Stop" to 193),
+        album("Arctic Monkeys", "AM", "Do I Wanna Know?" to 272, "R U Mine?" to 202, "Arabella" to 207),
+        album("Billie Eilish", "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?", "bad guy" to 194, "when the party's over" to 200),
+        album("Billie Eilish", "Happier Than Ever", "Happier Than Ever" to 298, "NDA" to 195),
+        album("Billie Eilish", "HIT ME HARD AND SOFT", "BIRDS OF A FEATHER" to 210),
+        album("Coldplay", "A Rush of Blood to the Head", "The Scientist" to 309, "Clocks" to 307),
+        album("Coldplay", "Parachutes", "Yellow" to 269),
+        album("Dua Lipa", "Future Nostalgia", "Levitating" to 203, "Don't Start Now" to 183, "Physical" to 194),
+    ).flatten()
+
+    private fun catalog(rnd: Random): List<Song> =
+        catalogSongs.map { if (rnd.nextInt(14) == 0) Song(it.title, it.artist, null, it.durationMs) else it } // a few untagged files
 
     /** Heavy listening skews to the first artists and first songs of each artist. */
     private fun pick(rnd: Random, songs: List<Song>, weights: DoubleArray, total: Double): Song {
@@ -84,7 +97,7 @@ object DemoHistory {
     ): List<DemoListen> {
         val rnd = Random(SEED)
         val songs = catalog(rnd)
-        val weights = DoubleArray(songs.size) { i -> 1.0 / (1 + i * 0.35) }
+        val weights = DoubleArray(songs.size) { i -> 1.0 / (1 + i * 0.2) }
         val total = weights.sum()
 
         val today = Instant.ofEpochMilli(nowMs).atZone(zone).toLocalDate()
