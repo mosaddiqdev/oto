@@ -60,19 +60,23 @@ import java.util.Locale
 private val dayFmt = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 private val shortFmt = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
-/** The sentence above the card. */
+/** The sentence above the card. It must add something the card does not already say, so it compares the peak with a typical day. */
 fun recordsSentence(d: StatsData): String? {
     val r = d.records ?: return null
-    if (r.biggestDay == null) return null
+    val big = r.biggestDay ?: return null
+    val active = d.daily.map { it.playedMs }.filter { it > 0 }.sorted()
+    val typical = if (active.size >= 3) active[active.size / 2] else 0L
+    val times = if (typical > 0) big.value.toDouble() / typical else 0.0
+    val ratio = if (times >= 1.5) String.format(Locale.US, "%.1f", times).removeSuffix(".0") + "\u00d7" else null
     if (r.anyAllTimeBest) {
         val which = when {
-            r.biggestDay.allTimeBest -> "your biggest day ever"
+            big.allTimeBest -> "your biggest day ever"
             r.longestRun?.allTimeBest == true -> "your longest streak ever"
             else -> "your most plays in a day"
         }
         return "A personal best: $which is in this window."
     }
-    return "Your biggest day was ${dayFmt.format(r.biggestDay.day)}, with ${formatDuration(r.biggestDay.value)}."
+    return if (ratio != null) "Your biggest day was $ratio a typical one." else "Your peaks, set against your ordinary days."
 }
 
 @Composable

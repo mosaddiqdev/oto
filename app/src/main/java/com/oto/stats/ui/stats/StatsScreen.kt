@@ -94,35 +94,35 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
     }
     discoverySentence(d)?.let { sentence ->
         item(key = "discovery") {
-            StatsSection("Discovery", sentence = sentence, modifier = Modifier.cardEnter(3, loaded)) {
+            StatsSection("New to you", sentence = sentence, modifier = Modifier.cardEnter(3, loaded)) {
                 DiscoveryCard(d, artStore, ui.periodLabel + ui.selection.kind.name)
             }
         }
     }
     hourSentence(d.hours, is24)?.let { sentence ->
         item(key = "hour") {
-            StatsSection("Your hour", sentence = sentence, modifier = Modifier.cardEnter(3, loaded)) {
+            StatsSection("Your hour", sentence = sentence, modifier = Modifier.cardEnter(4, loaded)) {
                 HourCard(d, ui.periodLabel + ui.selection.kind.name)
             }
         }
     }
     if (d.hours != null) showingUpSentence(showingUpDays(d, ui.trackedSince), ui.selection.kind)?.let { sentence ->
         item(key = "showing") {
-            StatsSection("Showing up", sentence = sentence, modifier = Modifier.cardEnter(4, loaded)) {
+            StatsSection("Showing up", sentence = sentence, modifier = Modifier.cardEnter(5, loaded)) {
                 ShowingUpCard(d, ui.selection.kind, ui.trackedSince, ui.periodLabel + ui.selection.kind.name)
             }
         }
     }
     if (d.hours != null) recordsSentence(d)?.let { sentence ->
         item(key = "records") {
-            StatsSection("Records", sentence = sentence, modifier = Modifier.cardEnter(5, loaded)) {
+            StatsSection("Your records", sentence = sentence, modifier = Modifier.cardEnter(6, loaded)) {
                 RecordsCard(d, ui.selection.kind, ui.trackedSince, ui.periodLabel + ui.selection.kind.name)
             }
         }
     }
     if (listenerSentence(d) != null) {
         item(key = "listener") {
-            StatsSection("How you listen", sentence = null, modifier = Modifier.cardEnter(5, loaded)) {
+            StatsSection("How you listen", sentence = null, modifier = Modifier.cardEnter(7, loaded)) {
                 ListenerCard(d, ui.periodLabel + ui.selection.kind.name)
             }
         }
