@@ -484,4 +484,85 @@ abstract class ListeningDao {
         """,
     )
     abstract suspend fun newArtistCount(startMs: Long, endMs: Long, unknownKey: String): Int
+
+    // ---- One track (detail page) ----
+
+    @Query("SELECT * FROM tracks WHERE id = :id")
+    abstract suspend fun trackById(id: Long): TrackEntity?
+
+    /** The artists credited on a track, primary first. */
+    @Query(
+        """
+        SELECT a.id AS artistId, a.name AS name
+        FROM track_artists ta JOIN artists a ON a.id = ta.artistId
+        WHERE ta.trackId = :trackId
+        ORDER BY ta.position
+        """,
+    )
+    abstract suspend fun artistsOfTrack(trackId: Long): List<ArtistRef>
+
+    @Query(
+        """
+        SELECT COUNT(*) AS plays,
+               COALESCE(SUM(playedMs), 0) AS playedMs,
+               COALESCE(SUM(CASE WHEN skipped THEN 1 ELSE 0 END), 0) AS skips,
+               COALESCE(AVG(completionPct), 0) AS avgCompletion,
+               COALESCE(MIN(startedAt), 0) AS firstAt,
+               COALESCE(MAX(startedAt), 0) AS lastAt
+        FROM listening_events
+        WHERE trackId = :trackId AND startedAt >= :startMs AND startedAt < :endMs
+        """,
+    )
+    abstract suspend fun trackStats(trackId: Long, startMs: Long, endMs: Long): TrackStats
+
+    @Query(
+        """
+        SELECT ((startedAt + tzOffsetMinutes * 60000) / 86400000) AS day,
+               COALESCE(SUM(playedMs), 0) AS playedMs,
+               COUNT(*) AS plays
+        FROM listening_events
+        WHERE trackId = :trackId AND startedAt >= :startMs AND startedAt < :endMs
+        GROUP BY day
+        ORDER BY day
+        """,
+    )
+    abstract suspend fun trackDaily(trackId: Long, startMs: Long, endMs: Long): List<DayTotal>
+
+    @Query(
+        """
+        SELECT CAST(((startedAt + tzOffsetMinutes * 60000) % 86400000) / 3600000 AS INTEGER) AS hour,
+               COALESCE(SUM(playedMs), 0) AS playedMs, COUNT(*) AS plays
+        FROM listening_events
+        WHERE trackId = :trackId AND startedAt >= :startMs AND startedAt < :endMs
+        GROUP BY hour
+        """,
+    )
+    abstract suspend fun trackHourly(trackId: Long, startMs: Long, endMs: Long): List<HourBucket>
+
+    @Query(
+        """
+        SELECT startedAt, playedMs, completionPct, skipped, sourcePackage, tzOffsetMinutes
+        FROM listening_events
+        WHERE trackId = :trackId AND startedAt >= :startMs AND startedAt < :endMs
+        ORDER BY startedAt DESC
+        LIMIT :limit
+        """,
+    )
+    abstract suspend fun trackListens(trackId: Long, startMs: Long, endMs: Long, limit: Int): List<TrackListen>
+
+    /** Where this track stands among all tracks in the same window, by plays: 1 is the most played. */
+    @Query(
+        """
+        SELECT COUNT(*) + 1 FROM (
+            SELECT trackId FROM listening_events
+            WHERE startedAt >= :startMs AND startedAt < :endMs
+            GROUP BY trackId
+            HAVING COUNT(*) > (SELECT COUNT(*) FROM listening_events WHERE trackId = :trackId AND startedAt >= :startMs AND startedAt < :endMs)
+        )
+        """,
+    )
+    abstract suspend fun trackRank(trackId: Long, startMs: Long, endMs: Long): Int
+
+    @Query("SELECT COUNT(DISTINCT trackId) FROM listening_events WHERE startedAt >= :startMs AND startedAt < :endMs")
+    abstract suspend fun tracksPlayed(startMs: Long, endMs: Long): Int
 }

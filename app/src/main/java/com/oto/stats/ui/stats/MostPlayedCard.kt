@@ -50,6 +50,9 @@ import androidx.compose.ui.unit.dp
 import com.oto.stats.data.ArtStore
 import com.oto.stats.stats.StatsData
 import com.oto.stats.ui.components.TrackCover
+import com.oto.stats.ui.nav.LocalNavigator
+import com.oto.stats.ui.nav.Route
+import com.oto.stats.ui.nav.doorway
 import com.oto.stats.ui.theme.OtoColors
 import com.oto.stats.ui.theme.OtoMotion
 
@@ -59,13 +62,13 @@ import com.oto.stats.ui.theme.OtoMotion
  */
 
 /** One row of any of the three lists, reduced to what the card draws. */
-private data class Entry(val title: String, val subtitle: String, val coverKey: String?, val plays: Int, val ms: Long, val artistId: Long? = null)
+private data class Entry(val title: String, val subtitle: String, val coverKey: String?, val plays: Int, val ms: Long, val artistId: Long? = null, val trackId: Long? = null)
 
 private enum class Tab(val label: String) { Artists("Artists"), Tracks("Tracks"), Albums("Albums") }
 
 private fun entries(d: StatsData, tab: Tab): List<Entry> = when (tab) {
     Tab.Artists -> d.topArtists.map { Entry(it.name, "", it.identityKey, it.plays, it.playedMs, it.artistId) }
-    Tab.Tracks -> d.topTracks.map { Entry(it.title, it.artist, it.identityKey, it.plays, it.playedMs) }
+    Tab.Tracks -> d.topTracks.map { Entry(it.title, it.artist, it.identityKey, it.plays, it.playedMs, trackId = it.trackId) }
     Tab.Albums -> d.topAlbums.map { Entry(it.album, it.artist, it.identityKey, it.plays, it.playedMs) }
 }
 
@@ -98,8 +101,15 @@ fun MostPlayedCard(
     artStore: ArtStore,
     photos: ArtistPhotos,
     key: String,
+    window: Route.Window?,
     modifier: Modifier = Modifier,
 ) {
+    val nav = LocalNavigator.current
+    // Tracks open their page; artists and albums join as their pages are built.
+    val opener: (Entry, Tab) -> (() -> Unit)? = { e, t ->
+        val id = e.trackId
+        if (nav != null && t == Tab.Tracks && id != null) ({ nav.open(Route.Track(id, window)) }) else null
+    }
     StatsCard(modifier.animateContentSize(tween(260, easing = OtoMotion.Decelerate))) {
         Segmented(
             options = Tab.entries.map { it.label },
@@ -122,9 +132,9 @@ fun MostPlayedCard(
             } else {
                 Column(Modifier.padding(top = 16.dp)) {
                     val top = value(list.first(), time).coerceAtLeast(1L).toFloat()
-                    Featured(list.first(), tab, time, artStore, photos, "$key/$t/$time")
+                    Featured(list.first(), tab, time, artStore, photos, "$key/$t/$time", opener(list.first(), tab))
                     list.drop(1).forEachIndexed { i, e ->
-                        ListRow(e, rank = i + 2, tab = tab, byTime = time, fraction = (value(e, time) / top).coerceIn(0f, 1f), artStore = artStore, photos = photos, key = "$key/$t/$time", index = i + 1)
+                        ListRow(e, rank = i + 2, tab = tab, byTime = time, fraction = (value(e, time) / top).coerceIn(0f, 1f), artStore = artStore, photos = photos, key = "$key/$t/$time", index = i + 1, onOpen = opener(e, tab))
                     }
                 }
             }
@@ -154,9 +164,9 @@ private fun MetricToggle(byTime: Boolean, onByTime: (Boolean) -> Unit, modifier:
 }
 
 @Composable
-private fun Featured(e: Entry, tab: Tab, byTime: Boolean, artStore: ArtStore, photos: ArtistPhotos, key: String) {
+private fun Featured(e: Entry, tab: Tab, byTime: Boolean, artStore: ArtStore, photos: ArtistPhotos, key: String, onOpen: (() -> Unit)?) {
     val fraction = rememberBar(1f, key, 0)
-    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = spoken(e, 1, tab) }) {
+    Column(Modifier.fillMaxWidth().doorway(onOpen).semantics(mergeDescendants = true) { contentDescription = spoken(e, 1, tab) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Cover(e, tab, 88, artStore, photos)
             Column(Modifier.padding(start = 16.dp).weight(1f)) {
@@ -194,12 +204,14 @@ private fun Featured(e: Entry, tab: Tab, byTime: Boolean, artStore: ArtStore, ph
 }
 
 @Composable
-private fun ListRow(e: Entry, rank: Int, tab: Tab, byTime: Boolean, fraction: Float, artStore: ArtStore, photos: ArtistPhotos, key: String, index: Int) {
+private fun ListRow(e: Entry, rank: Int, tab: Tab, byTime: Boolean, fraction: Float, artStore: ArtStore, photos: ArtistPhotos, key: String, index: Int, onOpen: (() -> Unit)?) {
     val f = rememberBar(fraction, key, index)
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(top = 16.dp)
+            .padding(top = 8.dp)
+            .doorway(onOpen)
+            .padding(top = 8.dp)
             .semantics(mergeDescendants = true) { contentDescription = spoken(e, rank, tab) },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

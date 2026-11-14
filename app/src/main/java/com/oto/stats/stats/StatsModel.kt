@@ -76,6 +76,9 @@ data class StatsData(
     val today: LocalDate,
     /** Personal bests inside this window, checked against your whole history. */
     val records: Records? = null,
+    /** The window these numbers cover, so a detail page opened from here can open on the same window. */
+    val startMs: Long = 0L,
+    val endMs: Long = Long.MAX_VALUE,
 )
 
 /** The few things worth saying about a period, each backed by a number. */
@@ -272,6 +275,8 @@ class StatsModel(
             comparisonName = comparisonName(period, sel.kind, ws),
             rank = PeriodRank.compute(allDaily, period, today, ws),
             records = Records.compute(daily, allDaily, if (enough) dao.mostReplayed(startMs, endMs) else null),
+            startMs = startMs,
+            endMs = endMs,
             heatStart = if (sel.kind == PeriodKind.ALL) today.minusMonths(11).withDayOfMonth(1) else period.range.start,
             heatEnd = if (sel.kind == PeriodKind.ALL) today else period.range.endExclusive.minusDays(1),
             today = today,

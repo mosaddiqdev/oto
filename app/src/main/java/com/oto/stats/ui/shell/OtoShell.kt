@@ -1,6 +1,19 @@
 package com.oto.stats.ui.shell
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.CompositionLocalProvider
+import com.oto.stats.ui.detail.TrackPage
+import com.oto.stats.ui.nav.LocalNavigator
+import com.oto.stats.ui.nav.Navigator
+import com.oto.stats.ui.nav.Route
+import com.oto.stats.ui.theme.OtoMotion
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
@@ -139,6 +152,10 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
     var tabName by rememberSaveable { mutableStateOf(Tab.Now.name) }
     var showSetup by rememberSaveable { mutableStateOf(false) }
     val tab = Tab.valueOf(tabName)
+    // Detail pages stack on top of the tabs. Encoded so the stack survives rotation and process death.
+    var stackText by rememberSaveable { mutableStateOf("") }
+    val stack = remember(stackText) { if (stackText.isEmpty()) emptyList() else stackText.split("|").mapNotNull { Route.decode(it) } }
+    val navigator = remember { Navigator(open = { r -> stackText = if (stackText.isEmpty()) r.encode() else stackText + "|" + r.encode() }, back = { stackText = stackText.substringBeforeLast("|", "") }) }
 
     if (showSetup) {
         BackHandler { showSetup = false }
@@ -158,6 +175,7 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
         return
     }
 
+    BackHandler(enabled = stack.isNotEmpty()) { navigator.back() }
     val backdrop = rememberLayerBackdrop()
     val headerProgress = remember { mutableFloatStateOf(0f) }
     // Stats only: 0..1, how far the in-page period control has scrolled away. The header grows its compact copy with it.
@@ -225,6 +243,32 @@ fun OtoShell(container: AppContainer, state: DebugState, actions: DebugActions) 
                 Spacer(Modifier.height(10.dp))
             }
             GlassTabBar(selected = tab, onSelect = { tabName = it.name }, backdrop = backdrop, chrome = chrome)
+        }
+
+        // Detail pages: slide in from the right over everything, slide back out on back.
+        CompositionLocalProvider(LocalNavigator provides navigator) {
+            AnimatedContent(
+                targetState = stack,
+                transitionSpec = {
+                    val push = targetState.size > initialState.size
+                    val t = if (push) {
+                        (slideInHorizontally(OtoMotion.slide()) { it / 3 } + fadeIn(OtoMotion.fade())) togetherWith
+                            (slideOutHorizontally(OtoMotion.slide()) { -it / 8 } + fadeOut(OtoMotion.fade()))
+                    } else {
+                        (slideInHorizontally(OtoMotion.slide()) { -it / 8 } + fadeIn(OtoMotion.fade())) togetherWith
+                            (slideOutHorizontally(OtoMotion.slide()) { it / 3 } + fadeOut(OtoMotion.fade()))
+                    }
+                    t.targetContentZIndex = if (push) 1f else 0f
+                    t
+                },
+                label = "detail",
+                modifier = Modifier.fillMaxSize(),
+            ) { pages ->
+                when (val top = pages.lastOrNull()) {
+                    is Route.Track -> TrackPage(top, container) { navigator.back() }
+                    null -> Box(Modifier.fillMaxSize())
+                }
+            }
         }
     }
 }

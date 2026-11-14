@@ -82,7 +82,7 @@ private fun LazyListScope.ready(d: StatsData, ui: StatsUiState, model: StatsMode
             sentence = mostPlayedSentence(d, tab, ui.selection.byTime),
             modifier = Modifier.cardEnter(1, loaded),
         ) {
-            MostPlayedCard(d, ui.selection.byTime, model::setByTime, tab, { tab = it }, artStore, photos, ui.periodLabel + ui.selection.kind.name)
+            MostPlayedCard(d, ui.selection.byTime, model::setByTime, tab, { tab = it }, artStore, photos, ui.periodLabel + ui.selection.kind.name, if (ui.selection.kind == com.oto.stats.stats.PeriodKind.ALL) null else com.oto.stats.ui.nav.Route.Window(d.startMs, d.endMs, ui.periodLabel))
         }
     }
     daysSentence(d.bars)?.let { sentence ->

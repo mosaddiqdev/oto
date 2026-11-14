@@ -35,3 +35,23 @@ data class HourBucket(val hour: Int, val playedMs: Long, val plays: Int)
 data class AppShareRow(val sourcePackage: String, val playedMs: Long, val plays: Int)
 
 data class TrackCount(val title: String, val artist: String, val total: Int)
+
+data class ArtistRef(val artistId: Long, val name: String)
+
+data class TrackStats(
+    val plays: Int,
+    val playedMs: Long,
+    val skips: Int,
+    val avgCompletion: Double,
+    val firstAt: Long,
+    val lastAt: Long,
+)
+
+data class TrackListen(
+    val startedAt: Long,
+    val playedMs: Long,
+    val completionPct: Int,
+    val skipped: Boolean,
+    val sourcePackage: String,
+    val tzOffsetMinutes: Int,
+)
